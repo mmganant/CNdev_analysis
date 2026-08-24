@@ -7,26 +7,32 @@ Manjari M-G Anant, Eli Zuercher, Maggie Lowman, Caleb Shi, Dylan Z. Faltine-Gonz
 CNdev_analysis/
 ├── single-cell/
 │   ├── Cb_URL.rmd
-│   └── Cb_excCN.rmd
+│   ├── Cb_excCN.rmd
+│   ├── Cb_inhibitory.rmd
+│   ├── MousevsChickenDev.rmd
+│   ├── RL_cyclingprog.rmd
+│   └── scATACseq_analysis.rmd
 │
 └── spatial-barseq3/
-    ├── E11.5/
-    │   ├── Raw_data_analysis_pipeline/
-    │   ├── Cell_type_analysis/
+    ├── individual_tps/
+    │   ├── E11.5/
+    │   │   ├── raw_pipeline/
+    │   │   ├── label_transfer.py
+    │   │   └── cell_type_analysis.py
+    │   ├── E12.5/
+    │   │   ├── raw_pipeline/
+    │   │   ├── label_transfer.py
+    │   │   └── cell_type_analysis.py
     │   └── ...
     │
-    ├── E12.5/
-    ├── E13.5/
-    ├── ...
-    ├── P56/
-    │
-    ├── Correlations_BARseq3/
-    ├── Correlations_scRNAseq/
-    ├── All_timepoints_integrated/
+    ├── excCN_allslices.ipynb
+    ├── excCN_barseq3corr_M-Lquant.ipynb
+    ├── inhibitory_integration.ipynb
+    ├── integrated_all_slices_all_tps.ipynb
+    ├── scrnaseq_spatial_correlations.ipynb
     │
     ├── Zsgreen1_analysis/
     │   ├── Raw_data_analysis_pipeline/
     │   └── Cell_type_analysis/
     │
-    ├── Inhibitory_neuron_integration_over_time/
     └── Adult_CN_cell_type_analysis/
