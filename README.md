@@ -1,6 +1,6 @@
-## Figures and Analysis Code for "Excitatory progenitors drive cerebellar nucleus development and evolution" (Anant, 2026)
-### Data Website: https://mmganant.github.io/CNdev_website/ 
-### File Structure
+### Data Explorer Website: https://mmganant.github.io/CNdev_website/ 
+### Data Repository: https://zenodo.org/records/21796565
+### Figures and Analysis Code for "Excitatory progenitors drive cerebellar nucleus development and evolution" (Anant, 2026)
 ```text
 CNdev_analysis/
 ├── single-cell/
