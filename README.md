@@ -1,10 +1,12 @@
-﻿# Figures and analysis code for "Excitatory progenitors drive cerebellar nucleus development and evolution" (Anant, 2026) 
+# Figures and Analysis Code for "Excitatory progenitors drive cerebellar nucleus development and evolution" (Anant, 2026)
+
 # CNdev_analysis
+
 ## Directory
+
+```text
+CNdev_analysis/
 ├── single-cell/
-│   ├── Cb_URL.rmd
-│   ├── Cb_URL.rmd
-│   ├── Cb_URL.rmd
 │   ├── Cb_URL.rmd
 │   └── Cb_excCN.rmd
 │
