@@ -1,6 +1,5 @@
-Excitatory progenitors drive cerebellar nucleus development and evolution 
+## Excitatory progenitors drive cerebellar nucleus development and evolution 
 Manjari M-G Anant, Eli Zuercher, Maggie Lowman, Caleb Shi, Dylan Z. Faltine-Gonzalez, Michael L. Piacentino, Jean Fan, Justus M. Kebschull
-
 ### Data Explorer Website: https://mmganant.github.io/CNdev_website/ 
 ### Data Repository: https://zenodo.org/records/21796565
 ### Figures and Analysis Code 
