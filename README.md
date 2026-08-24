@@ -1,19 +1,31 @@
 ﻿# Figures and analysis code for "Excitatory progenitors drive cerebellar nucleus development and evolution" (Anant, 2026) 
 # CNdev_analysis
 ## Directory
-### single-cell
-#### Cb_URL
-#### Cb_excCN
-#### 
-### spatial-barseq3
-#### E11.5 [...] P56
-##### Raw data analysis pipeline
-##### Cell type analysis
-#### Correlations BARseq3
-#### Correlations scRNAseq
-#### All timepoints integrated
-#### Zsgreen1 analysis
-##### Raw data analysis pipeline
-##### Cell type analysis
-#### Inhibitory neuron integration over time
-#### Adult CN cell type analysis
+├── single-cell/
+│   ├── Cb_URL.rmd
+│   ├── Cb_URL.rmd
+│   ├── Cb_URL.rmd
+│   ├── Cb_URL.rmd
+│   └── Cb_excCN.rmd
+│
+└── spatial-barseq3/
+    ├── E11.5/
+    │   ├── Raw_data_analysis_pipeline/
+    │   ├── Cell_type_analysis/
+    │   └── ...
+    │
+    ├── E12.5/
+    ├── E13.5/
+    ├── ...
+    ├── P56/
+    │
+    ├── Correlations_BARseq3/
+    ├── Correlations_scRNAseq/
+    ├── All_timepoints_integrated/
+    │
+    ├── Zsgreen1_analysis/
+    │   ├── Raw_data_analysis_pipeline/
+    │   └── Cell_type_analysis/
+    │
+    ├── Inhibitory_neuron_integration_over_time/
+    └── Adult_CN_cell_type_analysis/
