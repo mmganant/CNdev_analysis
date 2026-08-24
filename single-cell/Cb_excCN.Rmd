@@ -1,0 +1,1233 @@
+
+```{r}
+## NOW LOOK AT INHIBITORY NEURONS VENTRICULAR ZONE DATA
+```
+
+
+```{r cars}
+library(Seurat) 
+#library(SeuratDisk)
+#library(SeuratData)
+library(ggplot2)
+library(patchwork)
+library(dplyr)
+#library(sceasy)
+library(reticulate)
+#library(rliger)
+library(magrittr) # needs to be run every time you start R and want to use %>%
+library(dplyr) 
+library(Seurat)
+library(tidyverse)
+library(SeuratWrappers)
+library(harmony)
+library(batchelor)
+library(usethis)
+library(Seurat)
+library(monocle3)
+library(dplyr)
+```
+
+
+```{r}
+URL <- readRDS("URL_082026.rds")
+```
+
+
+
+```{r}
+URL_dcn <- subset(URL, subset = cell_type %in% c("Int+LatProg", "Int+LatDCN", "DCNProgX", "MedProg", "MedDCN"))
+
+```
+
+
+```{r}
+URL_dcn.mnn <- RunFastMNN(object.list = SplitObject(URL_dcn, split.by = "Sample"), assay = "SCT", features =10000, verbose = FALSE)
+URL_dcn[["mnn"]] <- CreateDimReducObject(Embeddings(URL_dcn.mnn, reduction = "mnn"), assay = "SCT")
+
+```
+
+```{r}
+URL_dcn <- RunUMAP(URL_dcn, reduction = "mnn", dims = 1:50, return.model = T)
+```
+
+
+```{r}
+DimPlot(URL_dcn, reduction = "umap", group.by = 'TimePoint', pt.size = 1)
+DimPlot(URL_dcn, reduction = "umap", group.by = 'orig.ident', pt.size = 1)
+DimPlot(URL_dcn, reduction = "umap", group.by = 'cell_type', pt.size = 1)
+
+FeaturePlot(URL_dcn, features = c( "Zfhx3"), pt.size = 1, max.cutoff = 3)
+FeaturePlot(URL_dcn, features = c( "Olig2"), pt.size = 1, max.cutoff = 3)
+FeaturePlot(URL_dcn, features = c( "Lmx1a"), pt.size = 1, max.cutoff = 3)
+FeaturePlot(URL_dcn, features = c( "Tbr1"), pt.size = 1, max.cutoff = 3)
+FeaturePlot(URL_dcn, features = c( "Eomes"), pt.size = 1, max.cutoff = 3)
+FeaturePlot(URL_dcn, features = c( "Lhx9"), pt.size = 1, max.cutoff = 3)
+FeaturePlot(URL_dcn, features = c( "Ntng1"), pt.size = 1, max.cutoff = 3)
+FeaturePlot(URL_dcn, features = c( "Olig2"), pt.size = , max.cutoff = 3)
+FeaturePlot(URL_dcn, features = c( "Robo3"), pt.size = 1, max.cutoff = 3)
+FeaturePlot(URL_dcn, features = c( "Pax6"), pt.size = 1, max.cutoff = 3)
+FeaturePlot(URL_dcn, features = c( "Prox1"), pt.size = 1, max.cutoff = 3)
+FeaturePlot(URL_dcn, features = c( "Ntng1"), pt.size = 1, max.cutoff = 3)
+FeaturePlot(URL_dcn, features = c( "Pax5"), pt.size = 1, max.cutoff = 3)
+
+
+```
+```{r}
+DimPlot(URL_dcn, reduction = "umap", group.by = 'fine_cell_type', pt.size = 1, label = TRUE)
+
+```
+
+```{r}
+URL_dcn <- FindNeighbors(URL_dcn)
+URL_dcn <- FindClusters(URL_dcn, resolution = 2)
+
+```
+
+```{r}
+DimPlot(URL_dcn, label =TRUE)
+```
+```{r}
+URL_dcn_subset <- subset(URL_dcn, !(RNA_snn_res.2 %in% c(3,7,14)))
+
+```
+
+```{r}
+URL_dcn_subset.mnn <- RunFastMNN(object.list = SplitObject(URL_dcn_subset, split.by = "Sample"), features = 1000, assay = "RNA", verbose = FALSE)
+URL_dcn_subset[["mnn"]] <- CreateDimReducObject(Embeddings(URL_dcn_subset.mnn, reduction = "mnn"), assay = "RNA")
+
+```
+
+```{r}
+URL_dcn_subset <- RunUMAP(URL_dcn_subset, reduction = "mnn", dims = 1:30, return.model = T)
+```
+
+```{r}
+DimPlot(URL_dcn_subset, reduction = "umap",pt.size = 1)
+DimPlot(URL_dcn_subset, reduction = "umap", group.by = 'orig.ident', pt.size = 1)
+DimPlot(URL_dcn_subset, reduction = "umap", group.by = 'fine_cell_type', pt.size = 1)
+
+FeaturePlot(URL_dcn_subset, features = c( "Xist"), pt.size = 1, max.cutoff = 3)
+FeaturePlot(URL_dcn_subset, features = c( "Olig2"), pt.size = 1, max.cutoff = 3)
+FeaturePlot(URL_dcn_subset, features = c( "Lmx1a"), pt.size = 1, max.cutoff = 3)
+FeaturePlot(URL_dcn_subset, features = c( "Tbr1"), pt.size = 1, max.cutoff = 3)
+FeaturePlot(URL_dcn_subset, features = c( "Eomes"), pt.size = 1, max.cutoff = 3)
+FeaturePlot(URL_dcn_subset, features = c( "Lhx9"), pt.size = 1, max.cutoff = 3)
+FeaturePlot(URL_dcn_subset, features = c( "Ntng1"), pt.size = 1, max.cutoff = 3)
+FeaturePlot(URL_dcn_subset, features = c( "Olig2"), pt.size = , max.cutoff = 3)
+FeaturePlot(URL_dcn_subset, features = c( "Robo3"), pt.size = 1, max.cutoff = 3)
+FeaturePlot(URL_dcn_subset, features = c( "Irx3"), pt.size = 1, max.cutoff = 3)
+FeaturePlot(URL_dcn_subset, features = c( "Pax6"), pt.size = 1, max.cutoff = 3)
+FeaturePlot(URL_dcn_subset, features = c( "Prox1"), pt.size = 1, max.cutoff = 3)
+
+#@FeaturePlot(CN_all_, features = c( ""))
+
+```
+
+```{r}
+URL_dcn_subset <- FindNeighbors(URL_dcn_subset)
+URL_dcn_subset <- FindClusters(URL_dcn_subset, resolution = 2)
+
+```
+
+```{r}
+DimPlot(URL_dcn_subset, label =TRUE)
+```
+
+
+
+```{r}
+URL_dcn_subset_ref <- subset(URL_dcn_subset, !(RNA_snn_res.2 %in% c(7,23,19)))
+URL_dcn_subset_ref <- subset(URL_dcn_subset_ref, Zfhx3 <1)
+URL_dcn_subset_ref <- subset(URL_dcn_subset_ref, Pax5 <1)
+
+```
+
+```{r}
+URL_dcn_subset_ref.mnn <- RunFastMNN(object.list = SplitObject(URL_dcn_subset_ref, split.by = "Sample"), features = 1000, assay = "RNA", verbose = FALSE)
+URL_dcn_subset_ref[["mnn"]] <- CreateDimReducObject(Embeddings(URL_dcn_subset_ref.mnn, reduction = "mnn"), assay = "RNA")
+
+```
+
+```{r}
+URL_dcn_subset_ref <- RunUMAP(URL_dcn_subset_ref, reduction = "mnn", dims = 1:50, return.model = T)
+```
+
+
+
+```{r}
+URL_dcn_subset_ref <- FindNeighbors(URL_dcn_subset_ref)
+URL_dcn_subset_ref <- FindClusters(URL_dcn_subset_ref, resolution = 4)
+
+```
+```{r}
+DimPlot(URL_dcn_subset_ref, label = TRUE )
+
+```
+
+
+
+
+
+
+
+```{r}
+options(future.globals.maxSize = 8000 *1024^2)
+```
+
+
+```{r}
+e17_keb <- readRDS("C:/Users/kebsc/OneDrive/Documents/e17cn_ke_8-2025.rds")
+e17_keb$Sample <- "e17_keb"
+e17_keb$TimePoint <- "E17"
+e17_bl <- readRDS("C:/Users/kebsc/OneDrive/Documents/e17cn_bl.rds")
+e17_bl$Sample <- "e17_bl"
+e17_bl$TimePoint <- "E17"
+#e17_keb <- SCTransform(e17_keb)
+
+#e17_bl <- SCTransform(e17_bl)
+
+```
+
+
+
+```{r}
+load("C:/Users/kebsc/Downloads/GSE160471_RAW/GSM4873765_mouse_data.RData/GSM4873765_mouse_data.RData")
+```
+
+```{r}
+rm(VZ)
+RL <- UpdateSeuratObject(RL)
+RL$Sample <- RL$orig.ident
+RL$TimePoint <- "adult"
+#RL <- SCTransform(RL)
+
+```
+
+
+```{r}
+DefaultAssay(e17_bl) <- "RNA"
+DefaultAssay(e17_keb) <- "RNA"
+
+# Keep the full object, but reduce the RNA assay only
+e17_bl[["SCT"]] <- NULL
+e17_keb[["SCT"]] <- NULL
+URL_dcn_subset_ref[["RNA"]] <- subset(URL_dcn_subset_ref[["RNA"]], features = rownames(URL_dcn_subset_ref[["SCT"]]))
+#RL[["RNA"]] <- subset(RL[["RNA"]], features = rownames(RL[["SCT"]]))
+
+gene_lists <- list(
+  rownames(URL_dcn_subset_ref),
+  rownames(RL),
+  rownames(e17_bl),
+  rownames(e17_keb)
+)
+
+common.genes <- Reduce(intersect, gene_lists)
+length(common.genes)
+
+
+e17_bl_ <- subset(e17_bl, features = common.genes)
+e17_keb_ <- subset(e17_keb, features = common.genes)
+URL_ <- subset(URL_dcn_subset_ref, features = common.genes)
+RL_ <- subset(RL, features = common.genes)
+
+
+```
+```{r}
+e17 <- e17_keb#merge(e17_keb, e17_bl)
+e17 <- JoinLayers(e17)
+e17 <- NormalizeData(e17)
+e17 <- ScaleData(e17)
+```
+
+
+```{r}
+e17 <- FindVariableFeatures(e17)
+e17 <- RunPCA(e17)
+e17 <- RunUMAP(e17, dims = 1:30)
+```
+
+
+```{r}
+e17 <- FindNeighbors(e17)
+
+e17 <- FindClusters(e17)
+DimPlot(e17, group.by = "seurat_clusters")
+DimPlot(e17, group.by = "Sample")
+
+```
+```{r}
+VlnPlot(e17, features = "Zfhx3")
+
+```
+
+```{r}
+e17_sub <- subset(e17, subset =  "seurat_clusters" != '3')
+```
+
+
+
+
+```{r}
+FeaturePlot(e17, feature = "Lmx1a")
+
+FeaturePlot(e17, feature = "Meis2")
+FeaturePlot(e17, feature = "Olig2")
+FeaturePlot(e17, feature = "Ntng1")
+
+
+```
+
+```{r}
+e17 <- FindClusters(e17)
+DimPlot(e17)
+```
+
+
+```{r}
+library(Seurat)
+library(patchwork)
+options(future.globals.maxSize = 10000 * 1024^2)
+
+# 1) Merge your three references into one Seurat object if you like,
+#    but then immediately split by sample:
+combined <- merge(URL_, y = c(e17_bl_, e17_keb_, RL_), project="URL_jk")
+
+sex_genes_mouse <- c(
+  "Xist", "Tsix", "Kdm6a", "Eif2s3x", "Kdm5c", "Ddx3x", "Usp9x", "Bcor",
+  "Car5b", "Smcx", "Shroom4", "Mecp2",
+  "Ddx3y", "Eif2s3y", "Kdm5d", "Uty", "Usp9y",
+  "Jarid1d", "Rbmy", "Zfy1", "Zfy2", "Sry", "Tspy", "Pramel1", "Tmsb4y"
+)
+combined <- subset(combined, features = setdiff(rownames(combined), sex_genes_mouse))
+
+
+
+```
+
+
+```{r}
+# Count cells per orig.ident
+cell_counts <- table(combined$Sample)
+
+# Keep only groups with >= 2 cells
+valid_idents <- names(cell_counts[cell_counts > 5])
+
+# Subset the Seurat object
+combined <- subset(combined, subset = Sample %in% valid_idents)
+```
+
+
+
+
+
+```{r}
+combined <- SCTransform(combined, verbose = FALSE)
+combined.mnn <- RunFastMNN(object.list = SplitObject(combined, split.by = "Sample"), assay = "SCT", verbose = FALSE)
+
+```
+
+
+
+
+```{r}
+combined[["mnn"]] <- CreateDimReducObject(Embeddings(combined.mnn, reduction = "mnn"), assay = "SCT")
+
+```
+
+```{r}
+#combined <- FindNeighbors(combined, reduction = "mnn", dims = 1:20, nn.method = "rann")
+combined <- RunUMAP(combined, reduction = "mnn", dims = 1:50, nn.method = 'rann')
+```
+
+
+```{r}
+combined <- FindNeighbors(combined, reduction = "mnn")
+```
+
+
+```{r}
+combined <- FindClusters(combined, resolution = 2)
+
+```
+
+```{r}
+DimPlot(combined, label =TRUE)
+DimPlot(combined, group.by = "TimePoint", label =TRUE)
+DimPlot(combined, group.by = "cell_type", label =TRUE)
+DimPlot(combined, group.by = "subareas", label =TRUE)
+```
+```{r}
+combined_alltp <- subset(combined, idents = setdiff(levels(Idents(combined)), c("11", "14", "20", '21', '23', '12', '6', '13', '22', '7', '17', '25', '0', '19', '18', '15', '26', '27', '16', '24', '1')))
+```
+
+
+
+
+
+
+```{r}
+combined_alltp.mnn <- RunFastMNN(object.list = SplitObject(combined_alltp, split.by = "Sample"), features = 400, assay = "SCT", verbose = FALSE)
+```
+```{r}
+combined_alltp[["mnn"]] <- CreateDimReducObject(Embeddings(combined_alltp.mnn, reduction = "mnn"), assay = "SCT")
+```
+
+```{r}
+combined_alltp <- FindNeighbors(combined_alltp, reduction = "mnn",dims = 1:40)
+combined_alltp <- RunUMAP(combined_alltp, reduction = "mnn", dims = 1:40, neighbors = 20, return.model = T, init = "pca")
+```
+
+
+```{r}
+DimPlot(combined_alltp, reduction = "umap", group.by = 'Sample', label = TRUE)
+DimPlot(combined_alltp, reduction = "umap", group.by = 'subareas', size = 1)
+DimPlot(combined_alltp, reduction = "umap", group.by = 'ident', size = 1)
+DimPlot(combined_alltp, reduction = "umap", group.by = 'classes', size = 1)
+DimPlot(combined_alltp, reduction = "umap", group.by = 'fine_cell_type', size = 1)
+```
+
+```{r}
+combined_alltp <-FindClusters(combined_alltp, resolution =2)#default = 1.2 
+DimPlot(combined_alltp, reduction = "umap", label  = TRUE)
+```
+
+```{r}
+FeaturePlot(combined_alltp, features = c("Rara"),reduction = "umap", max.cutoff = 2)
+FeaturePlot(combined_alltp, features = c("Rxra"),reduction = "umap", max.cutoff = 2)
+FeaturePlot(combined_alltp, features = c("Rarb"),reduction = "umap", max.cutoff = 2)
+FeaturePlot(combined_alltp, features = c("Rarg"),reduction = "umap", max.cutoff = 2)
+
+```
+
+```{r}
+combined_alltp <- FindClusters(combined_alltp, assay = "SCT", resolution = 1.2)
+```
+
+
+
+```{r}
+combined_alltp$branch <- recode(combined_alltp$SCT_snn_res.1.2,
+    "0" = "Int/Lat Prog", 
+    "1" = "Med",
+    "2" = "IntA/Lat", 
+    "3" = "RL",
+    "4" = "RL", 
+    "5" = "Med",
+    "6" = "IntA/Lat", 
+    "7" = "IntA/Lat",
+    "8" = "IntP", 
+    "9" = "Med",
+    "10" = "IntA/Lat", 
+    "11" = "Med",
+    "12" = "IntP",
+    "13" = "IntA/Lat", 
+    "14" = "Med",
+    "15" = "Med",
+    "16" = "IntP", 
+    "17" = "IntP",
+    '18'="Med_gly"
+
+  
+    # Add more as needed
+)
+
+library(stringr)
+
+# Remove suffix "_1" from cell names in combined_alltp
+new_cells <- str_remove(Cells(combined_alltp), "_1$")  # Remove trailing "_1"
+
+# Rename cells in combined_alltp with cleaned names
+combined_alltp <- RenameCells(combined_alltp, new.names = new_cells)
+
+# Match cell names of URL to combined_alltp
+match_idx <- match(Cells(URL), Cells(combined_alltp))
+
+# Assign branch labels from combined_alltp to URL, NA if no match
+URL$branch_intlat <- ifelse(
+  !is.na(match_idx),
+  as.character(combined_alltp$branch[match_idx]),
+  NA
+)
+
+
+
+```
+
+
+
+
+
+```{r}
+
+combined_alltp_noadult <- subset(combined_alltp, TimePoint != "adult") #TimePoint %in% c('E11.5', 'E12.5', 'E13.5', 'E14.5'))
+# ---------------------------------------------------------
+# 4. Plot UMAP with consistent colors
+# ---------------------------------------------------------
+p_branch <- DimPlot(
+  combined_alltp_noadult,
+  reduction = "umap",
+  group.by = "branch",
+  cols = branch_pal,
+  #label = TRUE,
+  repel = TRUE
+) + ggtitle("UMAP by Branch")
+
+p_branch <- DimPlot(
+  combined_alltp,
+  reduction = "umap",
+  group.by = "subareas",
+  #cols = branch_pal,
+  #label = TRUE,
+  repel = TRUE
+) + ggtitle("UMAP by Branch")
+
+p_branch
+
+```
+
+
+
+```{r}
+DimPlot(combined_alltp, group.by = "branch", label = TRUE)
+```
+
+
+```{r}
+# Example: Suppose 'irx3' is a metadata column indicating irx3 expression (TRUE/FALSE or thresholded)
+# Subset cells that are irx3+ and currently assigned to "Med" branch
+
+
+# Fetch irx3 expression data (adjust assay and slot as needed)
+irx3_expr <- FetchData(combined_alltp, vars = "Irx3")
+
+# Find irx3+ cells (expression > 0)
+irx3_positive_cells <- WhichCells(combined_alltp, expression = Irx3 > 0)
+
+# Optionally, if you want to restrict to current Med branch cells only (including NA)
+med_or_na_cells <- which(combined_alltp$branch == "Med")
+cells_to_update <- intersect(irx3_positive_cells, Cells(combined_alltp)[med_or_na_cells])
+
+# If you want to update all irx3+ cells regardless of branch:
+cells_to_update <- irx3_positive_cells
+
+# Assign new branch label
+combined_alltp$branch[cells_to_update] <- "Med_early"
+
+# Visualize
+DimPlot(combined_alltp, reduction = "umap", group.by = "branch", label = TRUE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+URL_nodcn <- subset(URL, subset = !(cell_type_vague %in% c("earlyDCN", "DCNProgX","earlyDCNProg","lateDCN","earlyDCNProg", "lateDCNProg","earlyDCNProg")))
+```
+
+```{r}
+# Define clusters to highlight (duplicates are removed)
+highlight_clusters <- c("earlyDCN", "DCNProgX", "earlyDCNProg", "lateDCN", "lateDCNProg")
+
+# Add branch_intlat column to Seurat object
+URL$branch_intlat <- ifelse(
+  URL$cell_type_vague %in% highlight_clusters, 
+  as.character(URL$cell_type_vague), # force character
+  NA
+)
+
+
+# Define a color palette named by cluster
+dcn_palette <- c(
+  "earlyDCN"      = "#E41A1C",  # vivid red
+  "earlyDCNProg"  = "#FF7F00",  # orange
+  "DCNProgX"      = "#377EB8",  # blue
+  "lateDCN"       = "#984EA3",  # purple
+  "lateDCNProg"   = "#4DAF4A"   # green
+)
+
+# Plot with custom palette
+DimPlot(
+  URL, 
+  group.by = "meta_neighbor_rel", 
+  #cols = dcn_palette
+)
+
+
+```
+
+
+```{r}
+FeaturePlot(URL_nodcn, features = c( "Meis2","Irx3","Lhx9", 'Pou3f2'),  max.cutoff = 2)
+
+FeaturePlot(URL_nodcn, features = c( "Robo3","Lmx1a", "Lhx2", "Meis1"), max.cutoff = 2)
+FeaturePlot(URL_nodcn, features = c( "Reln", "Pax6", 'Zic1'),  max.cutoff = 2)
+
+```
+
+
+```{r}
+DimPlot(combined_alltp, group.by = c("cell_type_vague"))
+FeaturePlot(combined_alltp, features = c( "Meis2","Irx3","Lhx9", 'Pou3f2'),  max.cutoff = 2)
+
+FeaturePlot(combined_alltp, features = c( "Robo3","Lmx1a", "Lhx2", "Meis1"), max.cutoff = 2)
+FeaturePlot(combined_alltp, features = c( "Reln", "Pax6", 'Zic1'), max.cutoff = 4)
+FeaturePlot(combined_alltp, features = c( "Nr2f2"), max.cutoff = 4)
+FeaturePlot(combined_alltp, features = c( "Crabp2"), max.cutoff = 4)
+FeaturePlot(combined_alltp, features = c( "Nfib"), max.cutoff = 4)
+FeaturePlot(combined_alltp, features = c( "Nfia"), max.cutoff = 4)
+
+```
+
+```{r}
+combined_alltp <- FindClusters(combined_alltp, resolution = 2)
+
+```
+
+```{r}
+DimPlot(combined_alltp, label =TRUE)
+DimPlot(combined_alltp, group.by = "TimePoint", label =TRUE)
+DimPlot(combined_alltp, group.by = "cell_type", label =TRUE)
+FeaturePlot(combined_alltp, features = c("Nfia"),max.cutoff = 2)
+FeaturePlot(combined_alltp, features = c("Nfix"),max.cutoff = 2)
+```
+
+
+
+```{r}
+# Define clusters to highlight
+highlight_clusters <- c("16", "7", "10", '5', '8', '13', '11', '9', '8', 0, 18, 20)
+
+# Create a new metadata column
+combined_alltp$branch_intlat <- ifelse(
+  combined_alltp$seurat_clusters %in% highlight_clusters,
+  "intlat",
+  "other"
+)
+
+# Check the new metadata column
+DimPlot(combined_alltp, group.by = "branch_intlat")
+DimPlot(combined_alltp, group.by = "seurat_clusters")
+```
+
+```{r}
+FeaturePlot(combined_alltp, features = "Pax5", max.cutoff = 2)
+FeaturePlot(combined_alltp, features = "Lhx2", max.cutoff = 6)
+FeaturePlot(combined_alltp, features = "Meis1", max.cutoff = 4)
+FeaturePlot(combined_alltp, features = "Lhx6", max.cutoff = 4)
+
+```
+
+
+```{r}
+FeaturePlot(combined_alltp, features = "Olig2", max.cutoff = 3)
+FeaturePlot(combined_alltp, features = "Meis2", max.cutoff = 3)
+FeaturePlot(combined_alltp, features = "Irx3", max.cutoff = 3)
+FeaturePlot(combined_alltp, features = "Nfia", max.cutoff = 3)
+FeaturePlot(combined_alltp, features = "Nfib", max.cutoff = 4)
+FeaturePlot(combined_alltp, features = "Crabp2", max.cutoff = 3)
+FeaturePlot(combined_alltp, features = "Nr2f2", max.cutoff = 4)
+FeaturePlot(combined_alltp, features = "Nr2f1", max.cutoff = 4)
+
+```
+
+
+
+
+
+```{r}
+combined_alltp_intlat <- subset(combined_alltp, subset = branch_intlat == "intlat")
+combined_alltp_intlat <- subset(combined_alltp_intlat, subset = TimePoint != "adult")
+
+DimPlot(combined_alltp_intlat, group.by = "branch_intlat")
+
+```
+
+```{r}
+combined_alltp_intlat <- FindClusters(combined_alltp_intlat, resolution = 1.2)
+
+DimPlot(combined_alltp_intlat, label = TRUE, size = 1)
+```
+
+
+```{r}
+# Define clusters to highlight
+highlight_clusters <- c("12", "6")
+
+# Create a new metadata column
+combined_alltp_intlat$branch_intlat <- ifelse(
+  combined_alltp_intlat$seurat_clusters %in% highlight_clusters,
+  combined_alltp_intlat$seurat_clusters,
+  NA
+)
+
+# Check the new metadata column
+DimPlot(combined_alltp_intlat, group.by = "branch_intlat")
+```
+
+
+```{r}
+FeaturePlot(combined_alltp_intlat, features ="Nfia")
+FeaturePlot(combined_alltp_intlat, features ="Nfib")
+FeaturePlot(combined_alltp_intlat, features ="Gjd2")
+
+FeaturePlot(combined_alltp_intlat, features ="Cdhr1")
+FeaturePlot(combined_alltp_intlat, features ="Nfia")
+FeaturePlot(combined_alltp_intlat, features ="Nfib")
+DimPlot(combined_alltp_intlat, group.by ="TimePoint")
+```
+
+
+
+```{r}
+library(ggplot2)
+
+library(ggplot2)
+library(dplyr)
+
+# Extract relevant metadata
+plot_data <- FetchData(combined_alltp_intlat, vars = c("seurat_clusters", "TimePoint"))
+
+# Make sure columns are factors (optional but useful for ordering)
+plot_data$seurat_clusters <- factor(plot_data$seurat_clusters)
+plot_data$TimePoint <- factor(plot_data$TimePoint)
+
+# Plot counts of cells per cluster per timepoint
+ggplot(plot_data, aes(x = seurat_clusters, fill = TimePoint)) +
+  geom_bar(position = "fill") +   # "fill" → proportional; use "stack" for raw counts
+  theme_classic() +
+  labs(x = "Seurat Cluster", y = "Proportion of Cells", fill = "Time Point") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+
+```{r}
+FeaturePlot(combined_alltp_intlat, features ="Olig2")
+
+FeaturePlot(combined_alltp_intlat, features ="Meis2")
+FeaturePlot(combined_alltp_intlat, features ="Irx3")
+FeaturePlot(combined_alltp_intlat, features =c("Rara", "Rarb", "Rarg"), max.cutoff = 2)
+
+FeaturePlot(combined_alltp_intlat, features ="Meis2")
+FeaturePlot(combined_alltp_intlat, features ="Gjd2")
+
+FeaturePlot(combined_alltp_intlat, features ="Cdhr1")
+FeaturePlot(combined_alltp_intlat, features ="Nfia")
+FeaturePlot(combined_alltp_intlat, features ="Nfib")
+DimPlot(combined_alltp_intlat, group.by ="TimePoint")
+DimPlot(combined_alltp_intlat, label = TRUE, size = 1)
+```
+
+
+
+```{r}
+combined_alltp_intlat_2_streams <- subset(combined_alltp_intlat, ident = c(6, 12))
+```
+
+
+
+
+```{r}
+combined_alltp_intlat_2_streams <- subset(combined_alltp_intlat, ident = c(6, 12))
+```
+
+```{r}
+Idents(combined_alltp_intlat) <- "seurat_clusters"
+combined_alltp_intlat_2_streams <- subset(combined_alltp_intlat, idents = c(6, 12))
+
+# Make sure the assay has data
+DefaultAssay(combined_alltp_intlat_2_streams) <- "RNA"
+combined_alltp_intlat_2_streams <- JoinLayers(combined_alltp_intlat_2_streams)
+
+# Normalize the RNA assay to regenerate counts
+combined_alltp_intlat_2_streams <- NormalizeData(combined_alltp_intlat_2_streams)
+
+
+markers_7_vs_16 <- FindMarkers(
+  combined_alltp_intlat_2_streams,
+  ident.1 = "6",
+  ident.2 = "12",
+  assay = "RNA",
+  logfc.threshold = 0.8,
+  min.pct = 0.5,
+  test.use = "wilcox"
+)
+
+
+
+head(markers_16_vs_7)
+
+
+# --- 3️⃣ Select top markers for each cluster ---------------------------------
+
+# Get top 10 upregulated genes for each
+top10_cluster16 <- markers_7_vs_16 %>%
+  
+  dplyr::arrange(desc(avg_log2FC)) %>%
+  head(10) %>%
+  rownames()
+
+top10_cluster7 <- markers_7_vs_16 %>%
+  
+  dplyr::arrange(avg_log2FC) %>%
+  head(20) %>%
+  rownames()
+
+top_genes <- unique(c(top10_cluster16, top10_cluster7))
+```
+
+```{r}
+DefaultAssay(combined_alltp_intlat_2_streams) <- "SCT"
+
+genes_present <- intersect(top_genes, rownames(combined_alltp_intlat_2_streams))
+
+DoHeatmap(
+  combined_alltp_intlat_2_streams,
+  features = genes_present,
+  group.by = "seurat_clusters",
+  label = TRUE
+) + scale_fill_gradientn(colors = c("navy", "white", "firebrick3"))
+
+```
+
+
+```{r}
+combined_alltp <- FindClusters(combined_alltp, resolution = 2)
+
+combined_alltp_med <- subset(combined_alltp, idents = c(2,6,19))
+```
+
+```{r}
+combined_alltp_med <- ScaleData(combined_alltp_med, vars.to.regress = "TimePoint")
+```
+
+
+```{r}
+combined_alltp_med <- RunPCA(combined_alltp_med)
+combined_alltp_med <- FindNeighbors(combined_alltp_med, dims = 1:30)
+#combined_alltp_med <- FindClusters(combined_alltp_med, resolution = 1)
+combined_alltp_med <- RunUMAP(combined_alltp_med, dims = 1:30)
+
+```
+
+
+```{r}
+combined_alltp_med <- FindClusters(combined_alltp_med, resolution = 1)
+
+FeaturePlot(combined_alltp_med, features ="Robo3")
+FeaturePlot(combined_alltp_med, features ="Irx3")
+FeaturePlot(combined_alltp_med, features ="Lhx9")
+FeaturePlot(combined_alltp_med, features ="Reln")
+
+DimPlot(combined_alltp_med, group.by ="TimePoint")
+
+DimPlot(combined_alltp_med, label = TRUE, size = 1)
+```
+```{r}
+
+#--- IRX3 subset ---#
+# Extract the cell identities and clusters
+combined_alltp_med_irx3 <- subset(combined_alltp_med, idents = c(3,4,2,5,6,7))
+combined_alltp_med_reln <- subset(combined_alltp_med, idents = c(0,1,10))
+
+#--- Create a new metadata column in your full object ---#
+combined_alltp$med_2p <- "Other"
+
+#--- Get cell names from your two subset objects ---#
+irx3_cells <- Cells(combined_alltp_med_irx3)
+reln_cells <- Cells(combined_alltp_med_reln)
+early_cells <- Cells(subset(combined_alltp, idents = c(8,9,14,0)))
+late_cells <- Cells(subset(combined_alltp, idents = c(1,4)))
+
+#--- Label cells according to which subset they came from ---#
+combined_alltp$med_2p[irx3_cells] <- "Early Medial"
+combined_alltp$med_2p[reln_cells] <- "Late Medial"
+combined_alltp$med_2p[early_cells] <- "Early Medial"
+combined_alltp$med_2p[late_cells] <- "Late Medial"
+#--- Convert to factor for cleaner plotting ---#
+#combined_alltp$med_2p <- factor(combined_alltp$med_2p, levels = c("ealy", "RELN", "Other"))
+
+#--- Check how many cells got each label ---#
+table(combined_alltp$med_2p)
+
+#--- Visualize on your full integrated UMAP ---#
+DimPlot(combined_alltp, group.by = "med_2p") 
+
+DimPlot(combined_alltp, label=TRUE) 
+
+
+```
+
+```{r}
+combined_alltp_e13 = subset(combined_alltp, TimePoint == "E14.5")
+
+# 1) Set identities to your medial stage annotation
+Idents(combined_alltp_e13) <- "med_2p"
+
+# Check levels to confirm names
+levels(combined_alltp_e13)
+# should contain "early_medial" and "late_medial"
+
+# 2) Find DE markers: early vs late medial
+library(dplyr)
+library(tibble)
+
+# Up in Early Medial
+early_up <- early_vs_late_medial %>%
+  rownames_to_column("gene") %>%
+  arrange(desc(avg_log2FC)) %>%      # positive = higher in Early
+  slice_head(n = 15) %>%
+  pull(gene)
+
+# Up in Late Medial
+late_up <- early_vs_late_medial %>%
+  rownames_to_column("gene") %>%
+  arrange(avg_log2FC) %>%            # negative = higher in Late
+  slice_head(n = 15) %>%
+  pull(gene)
+
+top_genes <- c(early_up, late_up)
+
+DoHeatmap(combined_alltp_e13, features = top_genes) + NoLegend()
+
+
+
+```
+```{r}
+library(dplyr)
+library(clusterProfiler)
+library(org.Mm.eg.db)  # use org.Hs.eg.db for human
+
+# Map symbols -> Entrez IDs
+entrez_ids <- bitr(
+  top_genes,
+  fromType = "SYMBOL",
+  toType   = "ENTREZID",
+  OrgDb    = org.Mm.eg.db
+)
+
+gene_entrez <- unique(entrez_ids$ENTREZID)
+ego_bp <- enrichGO(
+  gene          = gene_entrez,
+  OrgDb         = org.Mm.eg.db,
+  keyType       = "ENTREZID",
+  ont           = "BP",
+  pAdjustMethod = "BH",
+  pvalueCutoff  = 0.05,
+  qvalueCutoff  = 0.05,
+  readable      = TRUE       # convert back to gene symbols
+)
+
+head(as.data.frame(ego_bp))
+barplot(ego_bp, showCategory = 20)
+dotplot(ego_bp, showCategory = 20)
+
+```
+```{r}
+library(clusterProfiler)
+library(org.Mm.eg.db)
+library(GO.db)
+library(AnnotationDbi)
+
+
+# get all descendants of "developmental process" (GO:0032502)
+dev_root <- "GO:0032502"
+dev_ids  <- unique(c(dev_root, unlist(AnnotationDbi::as.list(GOBPOFFSPRING[dev_root]))))
+
+# keep only developmental-process terms
+ego_dev <- ego_bp[ego_bp@result$ID %in% dev_ids]
+
+# (optional) reduce redundancy among the kept terms
+#ego_dev <- simplify(ego_dev, cutoff=0.6, by="p.adjust", select_fun=min)
+
+head(as.data.frame(ego_bp))
+#barplot(ego_dev, showCategory = 20)
+dotplot(ego_dev, showCategory = 20)
+```
+
+```{r}
+combined_alltp <- FindClusters(combined_alltp, resolution =2)
+DimPlot(combined_alltp, group.by = "SCT_snn_res.2", label = TRUE)
+```
+
+
+```{r}
+library(dplyr)
+library(Seurat)
+library(ggplot2)
+
+# ---------------------------------------------------------
+# 1. Recode SCT clusters into branch categories
+# ---------------------------------------------------------
+combined_alltp$branch_corr <- recode(
+  combined_alltp$SCT_snn_res.2,
+  
+  "0"  = "Int/Lat Prog", 
+  "1"  = "Med",
+  "2"  = "Med", 
+  "3"  = "IntA",
+  "4"  = "RL", 
+  "5"  = "IntA/Lat",
+  "6"  = "Med", 
+  "7"  = "IntA/Lat",
+  "8"  = "RL", 
+  "9"  = "Int/Lat Prog",
+  "10" = "IntP", 
+  "11" = "IntA",
+  "12" = "Lat",
+  "13" = "IntP", 
+  "14" = "Med",
+  "15" = "Med",
+  "16" = "IntP", 
+  "17" = "Med",
+  "18" = "IntP",
+  "19"  = "Med",
+  "20" = "IntA/Lat", 
+  "21" = "Med",
+  "22" = "Lat",
+  "23" = "IntP", 
+  "24" = "IntP",
+  "25" = "IntP",
+  "26" = "IntP"
+)
+
+# ---------------------------------------------------------
+# 2. Branch color palette
+# ---------------------------------------------------------
+branch_pal <- c(
+  "Int/Lat Prog" = "#ff9913",
+  "Med"          = "blue",
+  "IntA/Lat"     = "red",
+  "RL"           = "lightblue",
+  "IntP"         = "#007a00",
+  "Med_gly"      = "#17becf",
+  "early"        = "brown",
+  "late"          = "blue",
+  "RL"
+)
+
+# ---------------------------------------------------------
+# 3. Convert med_2p to character so labels NEVER become numbers
+# ---------------------------------------------------------
+combined_alltp$med_2p <- as.character(combined_alltp$med_2p)
+
+# ---------------------------------------------------------
+# 4. Replace "Other" with branch — keep as character!
+# ---------------------------------------------------------
+combined_alltp$med_2p_branch <- ifelse(
+  combined_alltp$med_2p == "Other",
+  as.character(combined_alltp$branch),
+  combined_alltp$med_2p
+)
+
+# explicitly ensure it's character
+combined_alltp$med_2p_branch <- as.character(combined_alltp$med_2p_branch)
+
+# ---------------------------------------------------------
+# 5. Build palette for all med_2p_branch groups
+# ---------------------------------------------------------
+groups <- unique(combined_alltp$med_2p_branch)
+
+# Keep branch colors for matching groups
+pal_med2p_branch <- branch_pal[names(branch_pal) %in% groups]
+
+# Add colors for extra med_2p categories not in branch palette
+missing_groups <- groups[!groups %in% names(branch_pal)]
+
+if (length(missing_groups) > 0) {
+  set.seed(1)
+  extra_cols <- setNames(
+    grDevices::colors()[sample(1:600, length(missing_groups))],
+    missing_groups
+  )
+  pal_med2p_branch <- c(pal_med2p_branch, extra_cols)
+}
+
+# ---------------------------------------------------------
+# 6. Plot UMAP without losing labels
+# ---------------------------------------------------------
+DimPlot(
+  combined_alltp,
+  group.by = "branch_corr",
+  cols = branch_pal,
+  label = TRUE,
+  repel = TRUE
+)
+
+
+DimPlot(
+  combined_alltp,
+  group.by = "SCT_snn_res.2",
+  cols = pal_med2p_branch,
+  label = TRUE,
+  repel = TRUE
+)
+```
+
+
+```{r}
+
+#combined_tp_inta_lat = subset(combined_alltp, SCT_snn_res.1.2 == 7)
+combined_tp_inta_lat <- FindClusters(combined_tp_inta_lat, resolution = 0.5,graph.name = "SCT_snn")
+cells_use <- Cells(combined_tp_inta_lat)
+```
+
+```{r}
+DimPlot(combined_tp_inta_lat, group.by = "SCT_snn_res.0.5")
+```
+
+```{r}
+combined_alltp$SCT_snn_res.1.2 <- as.character(combined_alltp$SCT_snn_res.1.2)
+
+cells_use <- Cells(combined_tp_inta_lat)
+
+combined_alltp$SCT_snn_res.1.2[cells_use] <-
+  paste0(as.character(Idents(combined_tp_inta_lat)), "_")
+
+```
+
+```{r}
+DimPlot(combined_alltp, group.by = "SCT_snn_res.2", label = TRUE)
+DimPlot(combined_alltp, group.by = "subareas", label = TRUE)
+```
+
+
+```{r}
+FeaturePlot(combined_alltp, features = "Irx3", max.cutoff = 4, min.cutoff = 0)
+
+```
+
+
+```{r}
+library(dplyr)
+library(Seurat)
+library(ggplot2)
+
+# ---------------------------------------------------------
+# 0. Convert SCT cluster IDs to character (CRITICAL FIX)
+# ---------------------------------------------------------
+#combined_alltp$SCT_snn_res.1.2 <- as.character(combined_alltp$SCT_snn_res.1.2)
+
+# ---------------------------------------------------------
+# 1. Recode SCT clusters into branch categories
+# ---------------------------------------------------------
+combined_alltp$branch <- recode(
+  combined_alltp$SCT_snn_res.2,
+  
+  "0"  = "Int/Lat Prog", 
+  "1"  = "Med",
+  "2"  = "Med", 
+  "3"  = "IntA",
+  "4"  = "RL", 
+  "5"  = "IntA/Lat",
+  "6"  = "Med", 
+  "7"  = "IntA/Lat",
+  "8"  = "RL", 
+  "9"  = "Int/Lat Prog",
+  "10" = "IntP", 
+  "11" = "IntA",
+  "12" = "Lat",
+  "13" = "IntP", 
+  "14" = "Early Medial",
+  "15" = "Med",
+  "16" = "IntP", 
+  "17" = "Med",
+  "18" = "IntP",
+  "19"  = "Med",
+  "20" = "IntA/Lat", 
+  "21" = "Med",
+  "22" = "Lat",
+  "23" = "IntP", 
+  "24" = "IntP",
+  "25" = "IntP",
+  "26" = "IntP"
+)
+
+# ---------------------------------------------------------
+# 2. Color palette
+# ---------------------------------------------------------
+branch_pal <- c(
+  "Int/Lat Prog" = "#ff9913",
+  #"Med"          = "blue",
+  "IntA/Lat"     = "red",
+  "IntA"     = "#D19",
+  "Lat"     = "#950606",
+  "RL"           = "lightblue",
+  #"IntP/IntA"  
+  "IntP"         = "#228B22",
+  "Med_gly"      = "#17becf",
+  "Early Medial"        = "#8a6740",
+  "Late Medial"         = "blue"
+)
+# ---------------------------------------------------------
+# 3. Ensure med_2p is character
+# ---------------------------------------------------------
+combined_alltp$med_2p <- as.character(combined_alltp$med_2p)
+combined_alltp$branch <- as.character(combined_alltp$branch)
+
+# ---------------------------------------------------------
+# 4. "Other" gets branch label
+# ---------------------------------------------------------
+combined_alltp$med_2p_branch <- ifelse(
+  combined_alltp$med_2p == "Other",
+  combined_alltp$branch,
+  combined_alltp$med_2p
+)
+
+# ---------------------------------------------------------
+# 4b. Priority override: RL and Int/Lat Prog always win
+# ---------------------------------------------------------
+combined_alltp$med_2p_branch <- ifelse(
+  combined_alltp$branch %in% c("RL", "Int/Lat Prog"),
+  combined_alltp$branch,
+  combined_alltp$med_2p_branch
+)
+
+
+# ---------------------------------------------------------
+# 5. Palette for all groups
+# ---------------------------------------------------------
+groups <- unique(combined_alltp$med_2p_branch)
+pal_med2p_branch <- branch_pal[names(branch_pal) %in% groups]
+
+missing_groups <- groups[!groups %in% names(branch_pal)]
+if (length(missing_groups) > 0) {
+  set.seed(1)
+  extra_cols <- setNames(
+    grDevices::colors()[sample(1:600, length(missing_groups))],
+    missing_groups
+  )
+  pal_med2p_branch <- c(pal_med2p_branch, extra_cols)
+}
+```
+
+
+```{r}
+# ---------------------------------------------------------
+# 6. Plot UMAP
+# ---------------------------------------------------------
+DimPlot(
+  combined_alltp,
+  group.by = "med_2p_branch",
+  #cols = pal_med2p_branch,
+  label = TRUE,
+  repel = TRUE)
+
+```
+
+
+
+
+```{r}
+saveRDS(combined_alltp, "combined_alltp2-2025.rds")
+```
+

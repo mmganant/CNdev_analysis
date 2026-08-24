@@ -1,0 +1,2370 @@
+
+```{r}
+## NOW LOOK AT INHIBITORY NEURONS VENTRICULAR ZONE DATA
+```
+
+
+```{r cars}
+library(Seurat) 
+#library(SeuratDisk)
+#library(SeuratData)
+library(ggplot2)
+library(patchwork)
+library(dplyr)
+#library(sceasy)
+library(reticulate)
+#library(rliger)
+library(magrittr) # needs to be run every time you start R and want to use %>%
+library(dplyr) 
+library(Seurat)
+library(tidyverse)
+library(SeuratWrappers)
+library(harmony)
+library(batchelor)
+library(usethis)
+library(Seurat)
+library(monocle3)
+library(dplyr)
+```
+
+```{r}
+all_data <- readRDS('all_data.rds')
+```
+
+```{r}
+FeaturePlot(all_data, features = c("Zfhx3"))
+DimPlot(all_data, group.by  = c("TimePoint"))
+
+
+```
+
+
+```{r}
+FeaturePlot(all_data, features = c("Top2a", "Mki67", "Cdk1", "Ube2c", "Birc5", "Pcna", "Mcm5"))
+```
+
+```{r}
+library(Seurat)
+prol <- subset(all_data, Mki67 >1)
+# Get all Hox genes
+
+# Get ALL Hox genes
+genes <- rownames(prol)
+hox_genes <- genes[grepl("^Hox", genes, ignore.case = TRUE)]
+print(hox_genes)
+
+# Get Hox expression matrix
+DefaultAssay(prol) <- "RNA"
+hox_expr <- GetAssayData(prol, layer = "counts")[hox_genes, ]
+
+# Cells where ALL Hox genes == 0 across ALL Hox genes
+hox_zero_cells <- colnames(hox_expr)[Matrix::colSums(hox_expr) == 0]
+
+# NEW subset (replace your old prol_nohox)
+prol_nohox <- subset(prol, cells = hox_zero_cells)
+
+# VERIFY ALL Hox genes now = 0
+max_hox_new <- max(GetAssayData(prol_nohox, layer = "data")[hox_genes, ])
+print(paste("NEW Max Hox expr:", max_hox_new))  # SHOULD BE 0!
+
+print(paste("Hox-negative cells:", ncol(prol_nohox), "/", ncol(prol)))
+
+prol_nohox <- subset(prol_nohox, TimePoint %in% c("E9.5", "E10.5", "E11.5","E12.5", "E13.5"))
+```
+
+
+
+
+```{r}
+FeaturePlot(prol, features= "Zic1")
+FeaturePlot(prol, features= "Nr2f2")
+
+FeaturePlot(prol, features= "Nfia")
+FeaturePlot(prol, features= "Nfib")
+FeaturePlot(prol, features= "Lmx1a")
+FeaturePlot(prol, features= "Pax6")
+FeaturePlot(prol, features= "Lhx9")
+FeaturePlot(prol, features= "Gbx2")
+```
+
+```{r}
+# Then recompute MNN, neighbors, UMAP, clusters on the regressed data
+prol_nohox.mnn <- RunFastMNN(object.list = SplitObject(prol_nohox, split.by = "Sample"),
+                     assay = "RNA", verbose = FALSE)
+prol_nohox[["mnn"]] <- CreateDimReducObject(Embeddings(prol_nohox.mnn, "mnn"), assay = "RNA")
+
+prol_nohox <- FindNeighbors(prol_nohox, dims = 1:50, reduction = "mnn")
+prol_nohox <- RunUMAP(prol_nohox, dims = 1:50, reduction = "mnn")
+prol_nohox <- FindClusters(prol_nohox, resolution = 0.7, reduction = "mnn")
+```
+
+
+```{r}
+DimPlot(prol_nohox, label = TRUE)
+```
+
+
+```{r}
+#prol_nohox <- subset(prol_nohox,!(seurat_clusters %in% c(7,4)))
+# Then recompute MNN, neighbors, UMAP, clusters on the regressed data
+prol_nohox.mnn <- RunFastMNN(object.list = SplitObject(prol_nohox, split.by = "Sample"),
+                     assay = "RNA", verbose = FALSE)
+prol_nohox[["mnn"]] <- CreateDimReducObject(Embeddings(prol_nohox.mnn, "mnn"), assay = "RNA")
+
+prol_nohox <- FindNeighbors(prol_nohox, dims = 1:50, reduction = "mnn")
+prol_nohox <- RunUMAP(prol_nohox, dims = 1:50, reduction = "mnn")
+prol_nohox <- FindClusters(prol_nohox, resolution = 0.7, reduction = "mnn")
+```
+
+```{r}
+FeaturePlot(prol_nohox, features = c('Zic1', 'Gabra6', 'Pax6', "Lmx1a", "Top2a"))
+DimPlot(prol_nohox, group.by = "TimePoint")
+```
+
+
+```{r}
+RL <- prol_nohox
+DimPlot(RL)
+```
+
+
+
+```{r}
+s.genes <- cc.genes$s.genes
+g2m.genes <- cc.genes$g2m.genes
+# Load canonical cell cycle markers
+data("cc.genes")  # Built into Seurat
+s_genes <- cc.genes$s.genes
+g2m_genes <- cc.genes$g2m.genes
+cc_genes <- unique(c(s_genes, g2m_genes))
+cc_genes <- str_to_title(cc_genes)
+
+# Check how many genes
+cat("Cell cycle genes:", length(cc_genes), "\n")
+cat("Found in object:", sum(cc_genes %in% rownames(RL)), "\n")
+
+
+# 1. Normalize
+RL <- NormalizeData(RL)
+
+# 2. Score cell cycle FIRST (creates S.Score/G2M.Score metadata)
+RL <- CellCycleScoring(RL, s.features = s_genes, g2m.features = g2m_genes)
+
+# 3. Scale + regress cell cycle SCORES (not genes)
+RL <- ScaleData(RL, vars.to.regress = c("S.Score", "G2M.Score"))
+
+# 4. Now PCA/clustering
+RL <- RunPCA(RL, dims = 1:30)
+#RL <- RunHarmony(RL, group.by = 'TimePoint', dims = 1:30)
+
+RL <- FindNeighbors(RL,  dims = 1:30)
+RL <- FindClusters(RL, resolution = 0.7)
+RL <- RunUMAP(RL, dims = 1:30)
+
+
+```
+
+```{r}
+RL <- FindClusters(RL, resolution = 0.5)
+
+```
+
+```{r}
+p <- DimPlot(RL, pt.size = 2)
+p
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/prog_unbiasedcluster_umap.png",
+  plot = p,
+  width = 7,
+  height = 5,
+  #device = svglite::svglite
+)
+```
+
+
+```{r}
+# Set active ident to your new MNN clusters
+Idents(RL) <- "RNA_snn_res.0.5"  # or whatever cluster column was created
+
+# Find markers for ALL clusters
+all_markers <- FindAllMarkers(
+  RL,
+  only.pos = TRUE,
+  min.pct = 0.5,
+  logfc.threshold = 0.5,
+  test.use = "wilcox"
+)
+
+# Top 5 markers per cluster
+top_markers <- all_markers %>%
+  group_by(cluster) %>%
+  slice_max(n = 5, order_by = avg_log2FC) %>%
+  ungroup()
+
+
+genes_use <- unique(top_markers$gene)
+```
+
+```{r}
+
+p <- DotPlot(
+  RL,
+  features = genes_use,
+  assay = "RNA",
+  cols = c('yellow', 'purple'),
+  dot.min = 0,
+  col.min = -1,
+  col.max = 2
+) + 
+  scale_fill_gradient2(
+    low = "yellow",
+    mid = "yellow",
+    high = "purple",
+    midpoint = 0
+  ) +
+  RotatedAxis() +
+  theme(
+    axis.text.x = element_text(
+      angle = 90,   # vertical text
+      hjust = 1,
+      vjust = 0.5,
+      family = "Arial"
+    ),
+    axis.text.y = element_text(family = "Arial"),
+    text = element_text(family = "Arial")
+  )
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/prog_unbiasedcluster_dotplot.svg",
+  plot = p,
+  width = 15,
+  height = 5,
+  device = svglite::svglite
+)
+
+```
+
+```{r}
+p
+```
+
+```{r}
+DimPlot(RL, label = TRUE)
+DimPlot(RL, group.by = "TimePoint")
+FeaturePlot(RL, features = "Nfia")
+FeaturePlot(RL, features = "Nr2f2")
+FeaturePlot(RL, features = "Zfhx3")
+FeaturePlot(RL, features = "En1")
+FeaturePlot(RL, features = "Lmx1a")
+
+```
+
+
+
+
+
+```{r}
+RL_sub = RL
+FeaturePlot(RL_sub, features = c("Nr2f2", "Nfib", "En1", "Lmx1a"))
+FeaturePlot(combined_alltp, features = c("Nr2f2", "Nfib", "Pax5", "Lmx1a"), max.cutoff = 4)
+FeaturePlot(URL, features = c("En1"), max.cutoff = 4)
+DimPlot(RL_sub, group.by = "TimePoint")
+#FeaturePlot(URL, features = c("Hoxa2"), max.cutoff = 4)
+
+
+```
+
+
+```{r}
+FeaturePlot(RL, features = c("Crabp2"))
+FeaturePlot(RL, features = c("Crabp1"))
+FeaturePlot(RL, features = c("Rarb"))
+FeaturePlot(RL, features = c("Rxra"))
+FeaturePlot(RL, features = c("Rxra"))
+FeaturePlot(RL, features = c("Nr2f1"))
+FeaturePlot(RL, features = c("Meis2"))
+
+```
+
+```{r}
+FeaturePlot(RL, features = c("Atoh1"))
+
+```
+
+
+
+```{r}
+DimPlot(RL, label = TRUE)
+FeaturePlot(RL, features = c("Nr2f2", "Fgfr3"))
+FeaturePlot(RL, features = c("Rarb", "Fgfr1"), max.cutoff = 1)
+
+FeaturePlot(RL, features = c("Raldh2","En2"))
+
+DimPlot(RL, group.by = "TimePoint")
+DimPlot(RL, group.by = "orig.ident")
+
+```
+```{r}
+FeaturePlot(combined_alltp, c("Fgfr1"), max.cutoff = 1)
+
+```
+
+
+```{r}
+DimPlot(RL, label = TRUE)
+FeaturePlot(RL, features = c("Nr2f2", "Nfia"))
+
+FeaturePlot(RL, features = c("Zfhx3", "Reln"))
+```
+```{r}
+RL_sub = subset(RL, seurat_clusters !=7)
+```
+
+
+
+```{r}
+#combined_alltp = readRDS("C:/Users/kebsc/Downloads/combined_alltp2-2025.rds")
+
+#URL = readRDS("C:/Users/kebsc/Downloads/URL.rds")
+
+```
+
+
+
+```{r}
+
+# 2. LOAD and CREATE ensembl object
+library(biomaRt)
+ensembl <- useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+
+# 3. TEST connection
+listDatasets(ensembl)[1:5, ]
+
+# 4. NOW get your TFs
+tf_list <- getBM(attributes = c("mgi_symbol", "ensembl_gene_id"),
+                 filters = "go",
+                 values = "GO:0003700",  # DNA-binding TFs
+                 mart = ensembl)
+
+print(paste("Found", nrow(tf_list), "DNA-binding TFs"))
+print(head(tf_list))
+
+```
+
+
+```{r}
+URL <- FindClusters(URL, resolution = 1)
+URL$branch <- recode(URL$RNA_snn_res.1,
+    "0" = "early", 
+    "1" = "transition",
+    "2" = "early", 
+    "3" = "transition",
+    "4" = "early", 
+    "5" = "late",
+    "6" = "transition", 
+    "7" = "early",
+    "8" = "early", 
+    "9" = "early",
+    "10" = "early", 
+    "11" = "late",
+    "12" = "late",
+    "13" = "late", 
+    "14" = "early",
+    "15" = "late", 
+    "16" = "late",
+    "17" = "early", 
+    "18" = "late",
+    "19" = "late",
+    "20" = "early"
+  
+    # Add more as needed
+)
+DimPlot(URL, group.by = "branch")
+```
+
+
+```{r}
+URL_e13_lda <-subset(URL, TimePoint %in% c("E13.5", "E12.5"))
+# Keep ALL cells EXCEPT "RL" and "Int/Lat Prog"
+URL_e13_lda <- subset(URL_e13_lda, 
+                      !(branch %in% c("transition")))
+tf_list <- read.table("C:/Users/kebsc/Downloads/Mus_musculus_TF.txt", header = TRUE, fill = TRUE, sep = "\t")
+tf_list1 <- unique(na.omit(tf_list$Symbol))
+
+#tf_list1 <- tf_list1$mgi_symbol
+
+# 1. Filter TF list to genes ACTUALLY in your Seurat object
+tf_list1 <- intersect(tf_list1, rownames(URL_e13_lda))
+print(paste("Found", length(tf_list1), "TFs in your data"))
+
+
+# Method 2: Manual feature filtering (bulletproof)
+tf_features <- intersect(tf_list1, rownames(URL_e13_lda))
+URL_e13_lda_sub <- URL_e13_lda[tf_features, ]
+```
+
+
+```{r}
+
+set.seed(1)
+
+
+############################################
+## Shuffle options
+############################################
+shuffle_genes <- FALSE      # TRUE = randomize gene labels
+shuffle_labels <- FALSE     # TRUE = randomize cell type labels
+
+counts_mat <-  URL_e13_lda_sub[['RNA']]$counts
+meta <- URL_e13_lda_sub@meta.data
+URL_clean <- CreateSeuratObject(counts = counts_mat, meta.data = meta)
+
+
+# Verify it worked
+print(URL_e13_lda)        # Original size
+print(URL_clean)    # NEW smaller size
+
+library(Seurat)
+library(glmnet)
+library(dplyr)
+
+
+# =============================================================================
+# 1. SPLIT DATA (BEFORE FEATURE SELECTION)
+# =============================================================================
+
+cells <- colnames(URL_clean)
+train_cells <- sample(cells, 0.5 * length(cells))
+test_cells  <- setdiff(cells, train_cells)
+
+train_obj <- subset(URL_clean, cells = train_cells)
+test_obj  <- subset(URL_clean, cells = test_cells)
+
+# =============================================================================
+# 2. NORMALIZE + SCALE
+# =============================================================================
+train_obj <- NormalizeData(train_obj)
+train_obj <- ScaleData(train_obj, verbose = FALSE)
+
+test_obj <- NormalizeData(test_obj)
+test_obj <- ScaleData(test_obj, verbose = FALSE)
+
+
+############################################
+## Shuffle options
+############################################
+
+############################################
+## Shuffle metadata labels
+############################################
+if (shuffle_labels) {
+
+  train_obj$branch <- sample(
+    train_obj$branch
+  )
+
+  test_obj$branch <- sample(
+    test_obj$branch
+  )
+
+  cat("Metadata labels shuffled\n")
+}
+
+
+############################################
+## Shuffle gene labels
+############################################
+if (shuffle_genes) {
+
+  new_names <- sample(rownames(train_obj))
+
+  rownames(train_obj[["RNA"]]) <- new_names
+  rownames(test_obj[["RNA"]])  <- new_names
+
+  cat("Gene names shuffled\n")
+}
+```
+
+```{r}
+# =============================================================================
+# 3. FEATURE SELECTION (TRAIN ONLY)
+# =============================================================================
+Idents(train_obj) <- "branch"
+
+markers <- FindAllMarkers(
+  train_obj,
+  only.pos = TRUE,
+  min.pct = 0.6,
+  logfc.threshold = 1
+)
+
+#train_features <- markers %>%
+ # group_by(cluster) %>%
+ # slice_max(avg_log2FC, n = 100) %>%
+ # pull(gene) %>%
+ # unique()
+
+# keep only scaled genes
+scale_genes <- rownames(GetAssayData(train_obj, layer = "scale.data"))
+train_features <- intersect(scale_genes, markers$gene) #CHANGE!!!!
+
+cat("Training features:", length(train_features), "\n")
+
+# =============================================================================
+# 4. BUILD MATRICES
+# =============================================================================
+# TRAIN
+train_data <- GetAssayData(train_obj, layer = "scale.data")[train_features, ]
+train_matrix <- t(as.matrix(train_data))
+train_labels <- as.factor(train_obj$branch)
+
+# TEST
+test_data <- GetAssayData(test_obj, layer = "scale.data")[train_features, ]
+test_matrix <- t(as.matrix(test_data))
+test_labels <- as.factor(test_obj$branch)
+
+# =============================================================================
+# 5. TRAIN LOGISTIC REGRESSION
+# =============================================================================
+fit <- cv.glmnet(
+  x = train_matrix,
+  y = train_labels,
+  family = "multinomial",
+  alpha = 0   # ridge = stable
+)
+
+cat("Model trained!\n")
+
+# =============================================================================
+# 6. EVALUATION
+# =============================================================================
+# Predictions
+pred <- predict(fit, newx = test_matrix, s = "lambda.min", type = "class")
+
+# Accuracy
+acc <- mean(pred == test_labels)
+cat("Test accuracy:", acc, "\n")
+
+# Confusion matrix
+cat("\nConfusion matrix:\n")
+print(table(pred, test_labels))
+
+# =============================================================================
+# 7. PERMUTATION TEST (SIGNAL CHECK)
+# =============================================================================
+perm_labels <- sample(train_labels)
+
+fit_perm <- cv.glmnet(
+  x = train_matrix,
+  y = perm_labels,
+  family = "multinomial",
+  alpha = 0
+)
+
+pred_perm <- predict(fit_perm, newx = test_matrix, s = "lambda.min", type = "class")
+acc_perm <- mean(pred_perm == test_labels)
+
+cat("Permutation accuracy:", acc_perm, "\n")
+
+cm <- table(pred, test_labels)
+cm_prop <- prop.table(cm, 2)
+p <- heatmap(cm_prop)
+
+#svg(
+#  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRLprogL_confusion.svg",
+#  width = 7,
+#  height = 5
+#)
+
+heatmap(cm_prop)
+
+#dev.off()
+
+pred <- predict(fit, newx = test_matrix, s = "lambda.min", type = "response")
+
+prob_mat <- pred[, ,1]
+pred_labels <- colnames(prob_mat)[max.col(prob_mat)]
+max_prob <- apply(prob_mat, 1, max)
+
+# entropy (uncertainty)
+entropy <- -rowSums(pred * log(pred + 1e-10))
+
+# store in metadata
+test_obj$predicted_fate <- pred_labels
+test_obj$max_fate_prob <- max_prob
+test_obj$fate_entropy <- entropy
+
+
+# =============================================================================
+# 8. APPLY TO RL_sub (FIXED)
+# =============================================================================
+RL_sub_atoh1 <- RL#subset(RL_sub, Atoh1 > 0)
+RL_sub_atoh1 <- subset(
+  RL_sub_atoh1,
+  subset = !(Lmx1a > 0 & TimePoint == "E9.5")
+)
+#RL_sub_atoh1 <- subset(RL_sub_atoh1, seurat_clusters != 10)
+RL_sub_atoh1 <- FindClusters(RL_sub_atoh1)
+RL_sub_atoh1 <- subset(RL_sub_atoh1, seurat_clusters  != 10)
+#RL_sub_atoh1 <- NormalizeData(RL_sub_atoh1)
+#RL_sub_atoh1 <- ScaleData(RL_sub_atoh1)
+#RL_sub_atoh1 <- RunPCA(RL_sub_atoh1, verbose = FALSE, features = train_features)
+#RL_sub <- RunUMAP(RL_sub,  dims = 1:10,verbose = FALSE)
+
+rl_scale <- GetAssayData(RL_sub_atoh1, layer = "scale.data")
+
+# Create EMPTY matrix with all training features
+query_matrix <- matrix(
+  0,
+  nrow = ncol(rl_scale),
+  ncol = length(train_features)
+)
+
+colnames(query_matrix) <- train_features
+rownames(query_matrix) <- colnames(RL_sub_atoh1)
+
+# Fill only overlapping genes
+common_features <- intersect(train_features, rownames(rl_scale))
+
+query_matrix[, common_features] <- t(as.matrix(rl_scale[common_features, ]))
+
+# =============================================================================
+# Predict
+# =============================================================================
+query_probs <- predict(
+  fit,
+  newx = query_matrix,
+  s = "lambda.min",
+  type = "response"
+)
+
+# =============================================================================
+# 9. FATE BIAS METRICS
+# =============================================================================
+# max probability (commitment)
+prob_mat <- query_probs[, , 1]
+pred_labels <- colnames(prob_mat)[max.col(prob_mat)]
+max_prob <- apply(prob_mat, 1, max)
+
+# entropy (uncertainty)
+entropy <- -rowSums(query_probs * log(query_probs + 1e-10))
+# store in metadata
+RL_sub_atoh1$predicted_fate <- pred_labels
+RL_sub_atoh1$max_fate_prob <- max_prob
+RL_sub_atoh1$fate_entropy <- entropy
+
+cat("\nRL_sub predictions complete!\n")
+
+
+
+```
+
+
+```{r}
+id="h2y8qf"
+cell_types <- unique(RL_sub_atoh1$predicted_fate)
+
+#svg(
+#  filename = "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/RLbranch_PROG_fate_probability_histograms.svg",
+#  width = 10,
+#  height = 4
+#)
+
+par(mfrow = c(ceiling(length(cell_types)/4), 4))  # layout
+
+for (ct in cell_types) {
+  vals <- RL_sub_atoh1$max_fate_prob[RL_sub_atoh1$predicted_fate == ct]
+  
+  hist(
+    vals,
+    main = ct,
+    xlim = c(0, 1),
+    xlab = "Max Fate Prob",
+    col = "grey80",
+    border = "white"
+  )
+  # 20th percentile threshold
+  
+}
+
+#dev.off()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+# Get unique cell types from test_obj (used for thresholds)
+cell_types <- unique(test_obj$predicted_fate)
+
+# Compute 90th percentile thresholds from test_obj
+thresholds <- sapply(cell_types, function(ct) {
+  quantile(test_obj$max_fate_prob[test_obj$predicted_fate == ct], 0.2, na.rm = TRUE)
+})
+
+# Initialize metadata for RL_sub
+RL_sub_atoh1$high_fate_label <- NA  # default is NA
+
+for (ct in names(thresholds)) {
+  ct_clean <- gsub("\\.20%", "", ct)  # remove ".percent" at the end
+  print(ct_clean)
+  cells <- which(RL_sub_atoh1$predicted_fate == ct_clean)
+  
+  RL_sub_atoh1$high_fate_label[cells] <- ifelse(
+    RL_sub_atoh1$max_fate_prob[cells] > thresholds[ct],
+    RL_sub_atoh1$predicted_fate[cells],
+    NA
+  )
+}
+
+# Optional: convert to factor (NA will stay as NA)
+RL_sub_atoh1$high_fate_label <- factor(RL_sub_atoh1$high_fate_label, levels = unique(RL_sub_atoh1$predicted_fate))
+DimPlot(RL_sub_atoh1, group.by = "high_fate_label", pt.size = 2)
+```
+
+
+```{r}
+p <- DimPlot(RL_sub_atoh1, cols = c('early' = 'maroon', late = 'darkgreen'),group.by = "high_fate_label", pt.size = 2)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRLProg_branch.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+
+p <- DimPlot(RL_sub_atoh1,group.by = "TimePoint", pt.size = 2)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRLProg_timepoint.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+
+p <- FeaturePlot(RL_sub_atoh1, features = "Pax6", pt.size = 2, max.cutoff = 2, min.cutoff = 0)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRLProg_Pax6.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+
+p <- FeaturePlot(RL_sub_atoh1, features = "Lhx9", pt.size = 2, max.cutoff = 2, min.cutoff = 0)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRLProg_Lhx9.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+
+p <- FeaturePlot(RL_sub_atoh1, features = "Pcsk9", pt.size = 2, max.cutoff = 2, min.cutoff = 0)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRLProg_Pcsk9.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+
+p <- FeaturePlot(RL_sub_atoh1, features = "Lmx1a", pt.size = 2, max.cutoff = 2, min.cutoff = 0)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRLProg_Lmx1a.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+
+```
+```{r}
+
+DimPlot(RL_sub_atoh1, label = TRUE, pt.size = 2)
+
+FeaturePlot(RL_sub_atoh1, features = "Lmx1a", pt.size = 2)
+FeaturePlot(RL_sub_atoh1, features = "Lhx9", pt.size = 2)
+FeaturePlot(RL_sub_atoh1, features = "Pax6", pt.size = 2)
+FeaturePlot(RL_sub_atoh1, features = "Pcsk9", pt.size = 2)
+
+FeaturePlot(RL_sub_atoh1, features = "Lmx1a", pt.size = 2)
+DimPlot(RL_sub_atoh1, label = TRUE, pt.size = 2)
+DimPlot(RL_sub_atoh1, group.by = "TimePoint", pt.size = 2)
+DimPlot(RL_sub_atoh1, group.by = "high_fate_label", pt.size = 2)
+
+```
+
+
+```{r}
+library(ggplot2)
+library(scales)
+
+Idents(RL_sub_atoh1) <- "high_fate_label"
+
+df <- as.data.frame(table(
+  cluster = RL_sub_atoh1$high_fate_label,
+  TimePoint = RL_sub_atoh1$TimePoint
+))
+
+# Ensure desired ordering if needed
+df$cluster <- factor(df$cluster, levels = unique(df$cluster))
+
+p <- ggplot(df, aes(x = cluster, y = Freq, fill = TimePoint)) +
+  geom_col(
+    position = "fill",
+    width = 0.8,
+    color = "white",
+    linewidth = 0.3
+  ) +
+  scale_y_continuous(
+    labels = scales::percent_format(accuracy = 1),
+    expand = c(0, 0)
+  ) +
+  labs(
+    x = "RL branch",
+    y = "Proportion of cells",
+    fill = "TimePoint"
+  ) +
+  theme_classic(base_family = "Arial") +
+  theme(
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1,
+      size = 11,
+      colour = "black"
+    ),
+    axis.text.y = element_text(
+      size = 11,
+      colour = "black"
+    ),
+    axis.title = element_text(
+      size = 13,
+      face = "bold"
+    ),
+    legend.title = element_text(
+      size = 12,
+      face = "bold"
+    ),
+    legend.text = element_text(size = 11)
+  )
+
+p
+
+ggsave(
+  filename = "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRLprog_timedis_branch.svg",
+  plot = p,
+  width = 6,
+  height = 4,
+  units = "in",
+  bg = "white"
+)
+
+```
+
+
+```{r}
+RL_sub_atoh1$earlyvslate <- as.character(RL_sub_atoh1$high_fate_label)
+#RL_sub_atoh1$earlyvslate[!is.na(RL_sub_atoh1$earlyvslate)] <- "high_conf"
+
+RL_sub_atoh1$earlyvslate[is.na(RL_sub_atoh1$earlyvslate)] <- "low_conf"
+
+RL_sub_atoh1$earlyvslate <- factor(RL_sub_atoh1$earlyvslate)
+RL_sub_atoh1 <- ScaleData(RL_sub_atoh1, features = rownames(RL_sub_atoh1))
+
+
+Idents(RL_sub_atoh1) <- RL_sub_atoh1$earlyvslate
+
+markers_all <- FindAllMarkers(
+  RL_sub_atoh1,
+  only.pos = FALSE,   # keeps both up & down
+  logfc.threshold = 0.25,
+  min.pct = 0.25
+)
+markers_sig <- markers_all[
+  abs(markers_all$avg_log2FC) > 0.25,
+]
+library(dplyr)
+
+top_markers <- markers_sig %>%
+  group_by(cluster) %>%
+  slice_max(order_by = abs(avg_log2FC), n = 5)
+
+DoHeatmap(
+  RL_sub_atoh1,
+  features = top_markers$gene,
+  group.by = "earlyvslate"
+) + NoLegend()
+```
+
+```{r}
+# Initialize new metadata column in URL
+URL$branch <- as.character(URL$branch)
+
+URL$med_2p_branch_full <- URL$branch
+
+URL$med_2p_branch_full <- recode(
+  URL$branch,
+  "early"  = "Midbrain-fated Cells", 
+  "transition" = "RL",
+  "late" = "Granule Cells+UBCs"
+)
+colnames(combined_alltp) <- sub("_1$", "", colnames(combined_alltp))
+cells_shared <- intersect(colnames(URL), colnames(combined_alltp))
+
+URL$med_2p_branch_full[cells_shared] <-
+  combined_alltp$med_2p_branch[cells_shared]
+combined_alltp$branch_URL <- NA
+combined_alltp$branch_URL[cells_shared] <- URL$branch[cells_shared]
+```
+
+```{r}
+branch_pal <- c(
+  "Int/Lat Prog" = "#ff9913",
+  #"Med"          = "blue",
+  "IntA/Lat"     = "red",
+  "IntA"     = "#D19",
+  "Lat"     = "#950606",
+  "RL"           = "lightblue",
+  #"IntP/IntA"  
+  "IntP"         = "#228B22",
+  "Med_gly"      = "#17becf",
+  "Early Medial"        = "#8a6740",
+  "Late Medial"         = "blue",
+  "Midbrain-fated Cells"  = "black",
+  "Granule Cells+UBCs" = "yellow"
+)
+# Make sure the column is a factor
+URL$med_2p_branch_full <- factor(URL$med_2p_branch_full)
+# cells for the clusters you want in the back
+back_clusters <- c("Midbrain-fated Cells", "Granule Cells+UBCs")
+
+# order cells: back clusters first, then all others
+cell_order <- c(
+  rownames(URL@meta.data[URL$med_2p_branch_full %in% back_clusters, ]),
+  rownames(URL@meta.data[!(URL$med_2p_branch_full %in% back_clusters), ])
+)
+
+# store as new identity factor (optional)
+URL$med_2p_branch_full_ordered <- factor(
+  URL$med_2p_branch_full[cell_order],
+  levels = unique(URL$med_2p_branch_full[cell_order])
+)
+```
+
+```{r}
+DimPlot(URL, group.by = "med_2p_branch_full")
+```
+
+
+
+
+```{r}
+DimPlot(URL, group.by = "med_2p_branch_full")
+```
+
+
+```{r}
+FeaturePlot(URL_e13_lda, features = c("Nr2f1", "Nfib"))
+```
+
+
+```{r}
+URL_e13_lda <-subset(URL, TimePoint %in% c("E13.5", "E14.5"))
+# Keep ALL cells EXCEPT "RL" and "Int/Lat Prog"
+URL_e13_lda <- subset(URL_e13_lda, 
+     !(med_2p_branch_full %in% c("Int/Lat Prog", "IntA", "Lat", "Med", "RL", "RL_early", "RL_late", "Late Medial", "Granule Cells+UBCs")))
+
+# Sample equal number of cells from each category
+min_cells <- min(table(URL_e13_lda$med_2p_branch_full))  # smallest group size
+keep_cells <- c()
+
+for(celltype in unique(URL_e13_lda$med_2p_branch_full)) {
+  type_cells <- colnames(URL_e13_lda)[URL_e13_lda$med_2p_branch_full == celltype]
+  sampled_cells <- sample(type_cells, min_cells)  # sample min_cells from this type
+  keep_cells <- c(keep_cells, sampled_cells)
+}
+
+# Subset to balanced cells
+URL_e13_lda <- subset(URL_e13_lda, cells = keep_cells)
+
+print(paste("Balanced to", min_cells, "cells per category"))
+print("After balancing:")
+table(URL_e13_lda$med_2p_branch_full)
+
+
+tf_list <- read.table("C:/Users/kebsc/Downloads/Mus_musculus_TF.txt", header = TRUE, fill = TRUE, sep = "\t")
+tf_list1 <- unique(na.omit(tf_list$Symbol))
+
+#tf_list1 <- tf_list1$mgi_symbol
+
+# 1. Filter TF list to genes ACTUALLY in your Seurat object
+tf_list1 <- intersect(tf_list1, rownames(URL_e13_lda))
+print(paste("Found", length(tf_list1), "TFs in your data"))
+
+
+# Method 2: Manual feature filtering (bulletproof)
+tf_features <- intersect(tf_list1, rownames(URL_e13_lda))
+URL_e13_lda_sub <- URL_e13_lda[tf_features, ]
+
+counts_mat <-  URL_e13_lda_sub[['RNA']]$counts
+meta <- URL_e13_lda_sub@meta.data
+URL_clean <- CreateSeuratObject(counts = counts_mat, meta.data = meta)
+
+
+# Verify it worked
+print(URL_e13_lda)        # Original size
+print(URL_clean)    # NEW smaller size
+```
+
+
+
+
+
+```{r}
+library(Seurat)
+library(glmnet)
+library(dplyr)
+
+set.seed(1)
+
+# =============================================================================
+# 1. SPLIT DATA (BEFORE FEATURE SELECTION)
+# =============================================================================
+shuffle_genes = FALSE
+shuffle_labels = FALSE
+
+cells <- colnames(URL_clean)
+train_cells <- sample(cells, 0.5 * length(cells))
+test_cells  <- setdiff(cells, train_cells)
+
+train_obj <- subset(URL_clean, cells = train_cells)
+test_obj  <- subset(URL_clean, cells = test_cells)
+
+# =============================================================================
+# 2. NORMALIZE + SCALE
+# =============================================================================
+train_obj <- NormalizeData(train_obj)
+train_obj <- ScaleData(train_obj, verbose = FALSE)
+
+test_obj <- NormalizeData(test_obj)
+test_obj <- ScaleData(test_obj, verbose = FALSE)
+
+
+############################################
+## Shuffle options
+############################################
+
+############################################
+## Shuffle metadata labels
+############################################
+if (shuffle_labels) {
+
+  train_obj$med_2p_branch_full <- sample(
+    train_obj$med_2p_branch_full
+  )
+
+  test_obj$med_2p_branch_full <- sample(
+    test_obj$med_2p_branch_full
+  )
+
+  cat("Metadata labels shuffled\n")
+}
+
+
+############################################
+## Shuffle gene labels
+############################################
+if (shuffle_genes) {
+
+  new_names <- sample(rownames(train_obj))
+
+  rownames(train_obj[["RNA"]]) <- new_names
+  rownames(test_obj[["RNA"]])  <- new_names
+
+  cat("Gene names shuffled\n")
+}
+
+# =============================================================================
+# 3. FEATURE SELECTION (TRAIN ONLY)
+# =============================================================================
+Idents(train_obj) <- "med_2p_branch_full"
+
+markers <- FindAllMarkers(
+  train_obj,
+  only.pos = TRUE,
+  min.pct = 0.5,
+  logfc.threshold = 0.5
+)
+
+train_features <- markers %>%
+  group_by(cluster) %>%
+  slice_max(avg_log2FC, n = 100) %>%
+  pull(gene) %>%
+  unique()
+RL_sub_early <- RL_sub#subset(RL_sub, predicted_fate == "early")
+# Remove Lmx1a+ cells at E9.5
+RL_sub_early <- subset(
+  RL_sub_early,
+  subset = !(TimePoint == "E9.5" & Lmx1a > 0)
+)
+RL_sub_early <- NormalizeData(RL_sub_early)
+RL_sub_early <- ScaleData(RL_sub_early)
+RL_sub_early <- FindVariableFeatures(RL_sub_early, nfeatures = 1000)
+rl_var_genes <- VariableFeatures(RL_sub)
+# keep only scaled genes
+scale_genes <- rownames(GetAssayData(RL_sub_early, layer = "scale.data"))
+train_features <- intersect(train_features, scale_genes) #CHANGE!!!!
+train_features <- intersect(train_features, rl_var_genes) #CHANGE!!!!
+#train_features <- train_features[train_features != "Pax6"]
+#train_features <- c("Nr2f2", "Nr2f1", "Lmx1a", "Pax5", "Zfhx3", "Nfia", "Nfib", "En1", "En2")
+cat("Training features:", length(train_features), "\n")
+
+# =============================================================================
+# 4. BUILD MATRICES
+# =============================================================================
+# TRAIN
+train_data <- GetAssayData(train_obj, layer = "scale.data")[train_features, ]
+train_matrix <- t(as.matrix(train_data))
+train_labels <- as.factor(train_obj$med_2p_branch_full)
+
+# TEST
+test_data <- GetAssayData(test_obj, layer = "scale.data")[train_features, ]
+test_matrix <- t(as.matrix(test_data))
+test_labels <- as.factor(test_obj$med_2p_branch_full)
+
+# =============================================================================
+# 5. TRAIN LOGISTIC REGRESSION
+# =============================================================================
+fit <- cv.glmnet(
+  x = train_matrix,
+  y = train_labels,
+  family = "multinomial",
+  alpha = 1   # ridge = stable
+)
+
+cat("Model trained!\n")
+
+# =============================================================================
+# 6. EVALUATION
+# =============================================================================
+# Predictions
+pred <- predict(fit, newx = test_matrix, s = "lambda.min", type = "class")
+
+# Accuracy
+acc <- mean(pred == test_labels)
+cat("Test accuracy:", acc, "\n")
+
+# Confusion matrix
+cat("\nConfusion matrix:\n")
+print(table(pred, test_labels))
+
+# =============================================================================
+# 7. PERMUTATION TEST (SIGNAL CHECK)
+# =============================================================================
+perm_labels <- sample(train_labels)
+
+#fit_perm <- cv.glmnet(
+#  x = train_matrix,
+#  y = perm_labels,
+#  family = "multinomial",
+#  alpha = 0
+#)
+
+cm <- table(pred, test_labels)
+cm_prop <- prop.table(cm, 2)
+heatmap(cm_prop)
+
+
+#svg(
+#  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRLprog_confusion_CN.svg",
+#  width = 7,
+#  height = 5
+#)
+
+heatmap(cm_prop)
+
+#dev.off()
+
+
+pred <- predict(fit, newx = test_matrix, s = "lambda.min", type = "response")
+
+prob_mat <- pred[, ,1]
+pred_labels <- colnames(prob_mat)[max.col(prob_mat)]
+max_prob <- apply(prob_mat, 1, max)
+
+# entropy (uncertainty)
+entropy <- -rowSums(pred * log(pred + 1e-10))
+
+# store in metadata
+test_obj$predicted_fate <- pred_labels
+test_obj$max_fate_prob <- max_prob
+test_obj$fate_entropy <- entropy
+
+
+```
+
+
+
+```{r}
+# =============================================================================
+# 8. APPLY TO RL_sub (FIXED)
+# =============================================================================
+#RL_sub_early <- subset(RL_sub_early, TimePoint != "E12.5")
+#RL_sub_early <- subset(RL_sub_early, TimePoint != "E11.5")
+
+##RL_sub <- NormalizeData(RL_sub)
+##RL_sub <- ScaleData(RL_sub, verbose = FALSE)
+#RL_sub_early <- subset(RL_sub, predicted_fate == "early")
+#RL_sub_early <- RunPCA(RL_sub_early, verbose = FALSE)
+
+#RL_sub_early <- RunUMAP(RL_sub_early, dims = 1:30, verbose = FALSE)
+library(Seurat)
+
+# 1. Subset early cells
+RL_sub_early <- subset(RL_sub_atoh1, predicted_fate == "early")
+RL_sub_early <- subset(RL_sub_early, max_fate_prob>0.7)
+RL_sub_early = subset(RL_sub_early, TimePoint != "E13.5")
+
+# 2. Normalize
+RL_sub_early <- NormalizeData(RL_sub_early)
+
+# """
+# # 3. Load cell cycle genes
+# cc.genes <- Seurat::cc.genes.updated.2019
+# capitalize_first <- function(x) {
+#   paste0(toupper(substr(x, 1, 1)), tolower(substr(x, 2, nchar(x))))
+# }
+# cc.genes <- Seurat::cc.genes.updated.2019
+# 
+# s.genes <- capitalize_first(cc.genes$s.genes)
+# g2m.genes <- capitalize_first(cc.genes$g2m.genes)
+# # Optional: match gene names to your dataset
+# s.genes <- intersect(s.genes, rownames(RL_sub_early))
+# g2m.genes <- intersect(g2m.genes, rownames(RL_sub_early))
+# 
+# # 4. Score cell cycle
+# RL_sub_early <- CellCycleScoring(
+#   RL_sub_early,
+#   s.features = s.genes,
+#   g2m.features = g2m.genes,
+#   set.ident = FALSE
+# )
+# """
+
+# 5. Regress out cell cycle during scaling
+RL_sub_early <- ScaleData(
+  RL_sub_early,
+  verbose = FALSE
+)
+
+# 6. Continue pipeline
+RL_sub_early <- RunPCA(RL_sub_early,  features = train_features, verbose = FALSE)
+RL_sub_early <- RunUMAP(RL_sub_early, dims = 1:5, verbose = FALSE)
+query_matrix <- t(as.matrix(GetAssayData(RL_sub_early, layer = "scale.data")[train_features, ]))
+
+# =============================================================================
+# Predict
+# =============================================================================
+query_probs <- predict(
+  fit,
+  newx = query_matrix,
+  s = "lambda.min",
+  type = "response"
+)
+
+# =============================================================================
+# 9. FATE BIAS METRICS
+# =============================================================================
+# max probability (commitment)
+prob_mat <- query_probs[, , 1]
+pred_labels <- colnames(prob_mat)[max.col(prob_mat)]
+max_prob <- apply(prob_mat, 1, max)
+
+# entropy (uncertainty)
+entropy <- -rowSums(query_probs * log(query_probs + 1e-10))
+
+# store in metadata
+RL_sub_early$predicted_fate <- pred_labels
+RL_sub_early$max_fate_prob <- max_prob
+RL_sub_early$fate_entropy <- entropy
+cat("\nRL_sub predictions complete!\n")
+DimPlot(RL_sub_early, group.by = "predicted_fate", shuffle = TRUE, pt.size = 2)
+FeaturePlot(RL_sub_early, feature = "fate_entropy", pt.size = 2)
+
+DimPlot(RL_sub_early, group.by = "TimePoint", shuffle = TRUE, pt.size = 1)
+```
+
+```{r}
+id="h2y8qf"
+cell_types <- unique(RL_sub_early$predicted_fate)
+
+#svg(
+#  filename = "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRL_PROG_fate_probability_histograms.svg",
+#  width = 10,
+#  height = 4
+#)
+
+par(mfrow = c(ceiling(length(cell_types)/4), 4))  # layout
+
+for (ct in cell_types) {
+  vals <- RL_sub_early$max_fate_prob[RL_sub_early$predicted_fate == ct]
+  
+  hist(
+    vals,
+    main = ct,
+    xlim = c(0, 1),
+    xlab = "Max Fate Prob",
+    col = "grey80",
+    border = "white"
+  )
+  # 20th percentile threshold
+  abline(
+    v = threshold[ct],
+    col = "red",
+    lty = 2,
+    lwd = 2
+  )
+  
+}
+
+#dev.off()
+```
+
+
+```{r}
+cell_types <- unique(test_obj$predicted_fate)
+
+# 20th percentile threshold for each fate
+threshold <- sapply(cell_types, function(ct) {
+  quantile(
+    test_obj$max_fate_prob[test_obj$predicted_fate == ct],
+    0.2,
+    na.rm = TRUE
+  )
+})
+
+names(threshold) <- cell_types
+
+#svg(
+#  filename = "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRL_TEST_fate_probability_histograms.svg",
+#  width = 10,
+#  height = 4
+#)
+
+par(
+  mfrow = c(ceiling(length(cell_types)/4), 4),
+  mar = c(3, 3, 2, 1)  # smaller margins: bottom, left, top, right
+)
+
+for (ct in cell_types) {
+
+  vals <- test_obj$max_fate_prob[test_obj$predicted_fate == ct]
+
+  hist(
+    vals,
+    main = ct,
+    xlim = c(0, 1),
+    xlab = "Max Fate Prob",
+    col = "grey80",
+    border = "white"
+  )
+}
+
+#dev.off()
+```
+
+
+```{r}
+
+
+
+
+p <- FeaturePlot(RL_sub_early, features = "Pax6", pt.size = 2, max.cutoff = 2, min.cutoff = 0)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRLProgCN_Pax6.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+
+p <- FeaturePlot(RL_sub_early, features = "Pax5", pt.size = 2, max.cutoff = 2, min.cutoff = 0)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRLProgCN_Pax5.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+
+p <- FeaturePlot(RL_sub_early, features = "En1", pt.size = 2, max.cutoff = 2, min.cutoff = 0)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRLProgCN_En1.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+
+p <- FeaturePlot(RL_sub_early, features = "Lmx1a", pt.size = 2, max.cutoff = 2, min.cutoff = 0)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRLProgCN_Lmx1a.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+
+p <- FeaturePlot(RL_sub_early, features = "Zfhx3", pt.size = 2, max.cutoff = 2, min.cutoff = 0)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRLProgCN_Zfhx3.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+
+p <- FeaturePlot(RL_sub_early, features = "Nr2f2", pt.size = 2, max.cutoff = 2, min.cutoff = 0)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRLProgCN_Nr2f2.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+
+p <- FeaturePlot(RL_sub_early, features = "Crabp1", pt.size = 2, max.cutoff = 2, min.cutoff = 0)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRLProgCN_Crabp1.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+
+p <- FeaturePlot(RL_sub_early, features = "Nfia", pt.size = 2, max.cutoff = 2, min.cutoff = 0)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRLProgCN_Nfia.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+
+```
+
+
+
+```{r}
+FeaturePlot(RL_sub_early, features = c("Zfhx3", "En1", "Pax5", "Nr2f2"), pt.size = 2)
+FeaturePlot(RL_sub_early, features = c( "Crabp1", "Lmx1a", "Nfia", "Pax6"), pt.size = 2)
+
+library(Seurat)
+
+genes <- rev(c("Lmx1a", "Pax6", "Nfia","En1", "Nr2f2", "Crabp1", "Zfhx3",  "Pax5"))
+
+URL_e13_lda$med_2p_branch_full <- factor(
+  URL_e13_lda$med_2p_branch_full,
+  levels = c("Midbrain-fated Cells", "IntA/Lat", "IntP", "Early Medial")  # <-- your desired order
+)
+
+
+p <- DotPlot(
+  URL_e13_lda,
+  features = genes,
+  assay = "RNA",
+  group.by = 'med_2p_branch_full',
+  cols = c('yellow', 'purple'),
+  dot.min = -0.6,
+  dot.scale = 10,
+  col.min = -1,
+  col.max = 2
+  #min.pct = 0.25
+) + 
+  scale_fill_gradient2(
+    low = "yellow",
+    mid = "yellow",
+    high = "purple",
+    midpoint = 0
+  ) +
+  RotatedAxis() +
+  theme(
+    axis.text.x = element_text(
+      angle = 90,   # vertical text
+      hjust = 1,
+      vjust = 0.5,
+      family = "Arial"
+    ),
+    axis.text.y = element_text(family = "Arial"),
+    text = element_text(family = "Arial")
+  )
+
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRLCN_diffex_genes.svg",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+
+```
+```{r}
+p
+```
+
+
+
+`
+```{r}
+branch_pal <- c(
+  "Int/Lat Prog" = "#ff9913",
+  #"Med"          = "blue",
+  "IntA/Lat"     = "#ff9913",
+  "IntA"     = "#D19",
+  "Lat"     = "#950606",
+  "RL"           = "lightblue",
+  #"IntP/IntA"  
+  "IntP"         = "#228B22",
+  "Med_gly"      = "#17becf",
+  "Early Medial"        = "#8a6740",
+  "Late Medial"         = "blue",
+  "Midbrain-fated Cells"  = "black",
+  "Granule Cells+UBCs" = "yellow"
+)
+# Get unique cell types from test_obj (used for thresholds)
+cell_types <- unique(test_obj$predicted_fate)
+
+# Compute 90th percentile thresholds from test_obj
+thresholds <- sapply(cell_types, function(ct) {
+  quantile(test_obj$max_fate_prob[test_obj$predicted_fate == ct], 0.2, na.rm = TRUE)
+})
+
+# Initialize metadata for RL_sub
+RL_sub_early$high_fate_label <- NA  # default is NA
+
+for (ct in names(thresholds)) {
+  ct_clean <- gsub("\\.20%", "", ct)  # remove ".percent" at the end
+  print(ct_clean)
+  cells <- which(RL_sub_early$predicted_fate == ct_clean)
+  
+  RL_sub_early$high_fate_label[cells] <- ifelse(
+    RL_sub_early$max_fate_prob[cells] > thresholds[ct],
+    RL_sub_early$predicted_fate[cells],
+    NA
+  )
+}
+
+# Optional: convert to factor (NA will stay as NA)
+RL_sub_early$high_fate_label <- factor(RL_sub_early$high_fate_label, levels = unique(RL_sub_early$predicted_fate))
+
+p <- DimPlot(
+  RL_sub_early,
+  cols = branch_pal,
+  group.by = "high_fate_label",
+  pt.size = 2,
+  na.value = "lightgrey")
+p
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRLProg_CNlabel.svg",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+#DimPlot(RL_sub_early,  group.by = "predicted_fate", pt.size = 2)
+
+p <- DimPlot(RL_sub_early,group.by = "TimePoint", pt.size = 2)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRLProg_CNtimepoint.svg",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+```
+
+
+
+
+```{r}
+
+```
+```{r}
+p
+```
+
+
+```{r}
+library(Seurat)
+library(dplyr)
+
+# 1. Cluster (you already did this, included for completeness)
+RL_sub_early <- FindClusters(RL_sub_early, resolution = 0.3)
+
+# 2. Set identities
+Idents(RL_sub_early) <- "predicted_fate"
+
+# 3. Use RNA assay
+DefaultAssay(RL_sub_early) <- "RNA"
+
+
+desired_order <- rev(c(
+  "Early Medial",
+  "IntP",
+  "IntA/Lat",
+  "Midbrain-fated Cells"
+))
+
+RL_sub_early$predicted_fate <- factor(
+  RL_sub_early$predicted_fate,
+  levels = desired_order
+)
+
+# 4. Find differentially expressed genes
+markers <- FindAllMarkers(
+  RL_sub_early,
+  only.pos = TRUE,
+  min.pct = 0.25,
+  logfc.threshold = 0.25
+)
+
+# 5. Select top 10 genes per cluster
+top10 <- markers %>%
+  group_by(cluster) %>%
+  slice_max(n = 5, order_by = avg_log2FC)
+
+features_use <- top10$gene
+
+# 6. Scale data for those genes
+RL_sub_early <- ScaleData(RL_sub_early, features = features_use)
+
+
+p <- DotPlot(
+  RL_sub_early,
+  features = features_use,
+  assay = "RNA",
+  group.by = 'predicted_fate',
+  cols = c('yellow', 'purple'),
+  dot.min = -0.6,
+  dot.scale = 10,
+  col.min = -1,
+  col.max = 2
+  #min.pct = 0.25
+) + 
+  scale_fill_gradient2(
+    low = "yellow",
+    mid = "yellow",
+    high = "purple",
+    midpoint = 0
+  ) +
+  RotatedAxis() +
+  theme(
+    axis.text.x = element_text(
+      angle = 90,   # vertical text
+      hjust = 1,
+      vjust = 0.5,
+      family = "Arial"
+    ),
+    axis.text.y = element_text(family = "Arial"),
+    text = element_text(family = "Arial")
+  )
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRLprog_diffex_genesCN.svg",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+
+DimPlot(RL_sub_early, pt.size = 2)
+DimPlot(RL_sub_early, group.by = 'predicted_fate', pt.size = 2)
+DimPlot(RL_sub_early, group.by = 'TimePoint', pt.size = 2)
+
+```
+
+```{r}
+p
+```
+
+
+```{r}
+FeaturePlot(RL_sub_early, features = c("Nr2f2", "Nfia"))
+```
+
+
+```{r}
+library(ggplot2)
+library(scales)
+
+Idents(RL_sub_early) <- "high_fate_label"
+
+df <- as.data.frame(table(
+  cluster = RL_sub_early$high_fate_label,
+  TimePoint = RL_sub_early$TimePoint
+))
+
+# Ensure desired ordering if needed
+df$cluster <- factor(df$cluster, levels = unique(df$cluster))
+
+p <- ggplot(df, aes(x = cluster, y = Freq, fill = TimePoint)) +
+  geom_col(
+    position = "fill",
+    width = 0.8,
+    color = "white",
+    linewidth = 0.3
+  ) +
+  scale_y_continuous(
+    labels = scales::percent_format(accuracy = 1),
+    expand = c(0, 0)
+  ) +
+  labs(
+    x = "early CN",
+    y = "Proportion of cells",
+    fill = "TimePoint"
+  ) +
+  theme_classic(base_family = "Arial") +
+  theme(
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1,
+      size = 11,
+      colour = "black"
+    ),
+    axis.text.y = element_text(
+      size = 11,
+      colour = "black"
+    ),
+    axis.title = element_text(
+      size = 13,
+      face = "bold"
+    ),
+    legend.title = element_text(
+      size = 12,
+      face = "bold"
+    ),
+    legend.text = element_text(size = 11)
+  )
+
+p
+
+ggsave(
+  filename = "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRLprog_timedis_earlyCN.svg",
+  plot = p,
+  width = 6,
+  height = 4,
+  units = "in",
+  bg = "white"
+)
+```
+
+
+
+
+
+
+
+```{r}
+Idents(RL_sub_early) <- "predicted_fate"
+
+```
+```{r}
+RL_sub_intlat <- subset(RL_sub_early, predicted_fate %in% c("IntA/Lat", "IntP"))
+markers <- FindAllMarkers(RL_sub_intlat, group.by = "predicted_fate")
+
+```
+
+
+```{r}
+# First filter by min.pct if you want that criterion
+markers_filt <- markers %>%
+  filter(pct.1 > 0.6,pct.2 < pct.1, p_val_adj < 0.05, abs(avg_log2FC) > 0.25)
+
+# Then take top markers per cluster
+top_markers <- markers_filt %>%
+  group_by(cluster) %>%
+  slice_max(order_by = abs(avg_log2FC), n = 10) %>%
+  ungroup()
+
+```
+
+```{r}
+p <- FeaturePlot(combined_alltp, features = "En2", max.cutoff = 2)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/CNdev_En2.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+
+p <- FeaturePlot(combined_alltp, features = "Crabp1", max.cutoff = 2)
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/CNdev_Crabp1.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+```
+
+
+
+```{r}
+genes <- rev(c("En2", "En1", "Fgf15", "Nfia", "Nfib", "Cnpy1", "Nr2f2", "Nr2f1", "Irx3", "Meis2", "Crabp1"))
+
+p <- DotPlot(
+  RL_sub_intlat,
+  features = genes,
+  assay = "RNA",
+  group.by = 'predicted_fate',
+  cols = c('yellow', 'purple'),
+  dot.min = -0.6,
+  dot.scale = 10,
+  col.min = -1,
+  col.max = 2
+  #min.pct = 0.25
+) + 
+  scale_fill_gradient2(
+    low = "yellow",
+    mid = "yellow",
+    high = "purple",
+    midpoint = 0
+  ) +
+  RotatedAxis() +
+  theme(
+    axis.text.x = element_text(
+      angle = 90,   # vertical text
+      hjust = 1,
+      vjust = 0.5,
+      family = "Arial"
+    ),
+    axis.text.y = element_text(family = "Arial"),
+    text = element_text(family = "Arial")
+  )
+p
+```
+
+
+```{r}
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/intlatprog_diffex_genes.svg",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+
+```
+```{r}
+FGF_core_strict <- c("Dusp6", "En2", "Cnpy1", "Fgf15")
+RA_core_strict <- c("Crabp1", "Meis2",  "Nr2f2", "Rbp1")
+
+RL_sub_intlat <- AddModuleScore(RL_sub_intlat, features = FGF_core_strict, name = "FGF")
+RL_sub_intlat <- AddModuleScore(RL_sub_intlat, features = RA_core_strict, name = "RA")
+
+
+```
+
+```{r}
+FeaturePlot(RL_sub_intlat, features = c("FGF1", "RA1"))
+VlnPlot(RL_sub_intlat,  features = c("FGF1")) + ylim(0,2)
+VlnPlot(RL_sub_intlat, features = c("RA1")) + ylim(0,4)
+
+```
+
+
+```{r}
+inta_lat_gene <- top_markers$gene[top_markers$cluster == "IntA/Lat"]
+inta_lat_gene
+```
+
+
+```{r}
+intp_gene <- top_markers$gene[top_markers$cluster == "IntP"]
+intp_gene
+```
+```{r}
+library(msigdbr)
+library(msigdbr)
+library(dplyr)
+
+# Example: Hallmark + Reactome for mouse
+msig_mouse_c5 <- msigdbr(
+  species = "Mus musculus",
+  category =  "C5",          # H = Hallmark, C2 = curated (KEGG/Reactome/WP)
+  #subcategory = "REACTOME"          # optional; drop this to get all C2
+)
+msig_mouse_h <- msigdbr(
+  species = "Mus musculus",
+  category =  "H",          # H = Hallmark, C2 = curated (KEGG/Reactome/WP)
+  #subcategory = "REACTOME"          # optional; drop this to get all C2
+)
+msig_mouse_c2 <- msigdbr(
+  species = "Mus musculus",
+  category =  "C2",          # H = Hallmark, C2 = curated (KEGG/Reactome/WP)
+  #subcategory = "REACTOME"          # optional; drop this to get all C2
+)
+```
+
+
+```{r}
+# Convert to a list: pathway → gene vector
+msig_list <- bind_rows(msig_mouse_c5, msig_mouse_h, msig_mouse_c2) %>%
+  split(.$gs_name) %>%
+  lapply(function(x) unique(x$gene_symbol))
+```
+
+
+```{r}
+# Background gene universe (common to both analyses)
+universe_genes <-rownames(RL_sub)
+
+t2g <- stack(msig_list)
+colnames(t2g) <- c("gene", "term")
+t2g <- t2g[,c('term', 'gene')]
+t2g <- unique <- t2g
+
+# Enrichment for analysis 1
+ego1 <- enricher(
+  gene = inta_lat_gene,
+  TERM2GENE = t2g,
+  universe = universe_genes,
+  pAdjustMethod = "BH",
+  qvalueCutoff = 0.05
+)
+
+```
+
+```{r}
+# Background gene universe (common to both analyses)
+universe_genes <-rownames(RL_sub)
+
+t2g <- stack(msig_list)
+colnames(t2g) <- c("gene", "term")
+t2g <- t2g[,c('term', 'gene')]
+t2g <- unique <- t2g
+
+# Enrichment for analysis 1
+ego2 <- enricher(
+  gene = intp_gene,
+  TERM2GENE = t2g,
+  universe = universe_genes,
+  pAdjustMethod = "BH",
+  qvalueCutoff = 0.05
+)
+```
+
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+library(dplyr)
+RL_sub_conf <- subset(RL_sub, max_fate_prob>0.6)
+
+# Convert to character first (fixes factor/list issues)
+RL_sub@meta.data$predicted_fate <- as.character(RL_sub@meta.data$predicted_fate)
+RL_sub@meta.data$Sample <- as.character(RL_sub@meta.data$Sample)
+
+# NOW count works
+fate_time_summary <- RL_sub_conf@meta.data %>%
+  dplyr::count(predicted_fate, Sample) %>%
+  dplyr::group_by(Sample) %>%
+  dplyr::mutate(prop = n / sum(n) * 100) %>%
+  dplyr::ungroup()
+
+
+# Plot
+library(ggplot2)
+ggplot(fate_time_summary, aes(x = Sample, y = prop, fill = predicted_fate)) +
+  geom_bar(stat = "identity") +
+  theme_classic() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Predicted fate composition by timepoint for prob > 0.7") 
+
+
+```
+```{r}
+library(dplyr)
+library(pheatmap)
+# Install MetaNeighbor (one-time)
+# BiocManager::install("MetaNeighbor")
+
+library(MetaNeighbor)
+library(Seurat)
+
+# 1. Prepare data: treat "predicted_fate" as cell types
+expr_mat <- GetAssayData(RL_sub, slot = "counts")
+#expr_mat <- expr_mat[VariableFeatures(RL_sub)[1:1000], ]  # top variable genes
+RL$study <- 1
+
+sce <- SingleCellExperiment(assays = list(data = expr_mat))
+
+# 2. Run MetaNeighbor (self-comparison)
+mn_result <- MetaNeighborUS(
+  var_genes = VariableFeatures(RL_sub)[1:1000],
+  dat = sce, 
+  cell_type = RL_sub$predicted_fate,
+  study_id = RL$study,
+  fast_version = TRUE
+)
+```
+
+
+```{r}
+# 3. Plot MetaNeighbor heatmap (clusters x clusters)
+plotHeatmap(mn_result)
+
+# 4. Get similarity scores table
+mn_scores <- mn_result$scores
+print(mn_scores)  # AUROC between each pair of predicted_fates
+
+# 5. Top matches (reciprocal best hits)
+top_hits <- getReciprocalTopHits(mn_result)
+print(top_hits)
+ng_method = "complete"
+
+
+```
+
+
+```{r}
+hist(max_prob, xlim = c(0,1))
+```
+
+```{r}
+FeaturePlot(RL_sub, features = c("Fzd10"))
+FeaturePlot(combined_alltp, features = c("Lmx1a"), max.cutoff = 4)
+```
+```{r}
+all_markers <- FindAllMarkers(
+  RL_sub,
+  group.by = "predicted_fate",
+  only.pos = TRUE,        # keep only upregulated genes
+  min.pct = 0.25,         # expressed in ≥25% cells
+  logfc.threshold = 0.25  # minimum log fold change
+)
+
+
+all_markers_RL <- all_markers %>%
+  filter(p_val_adj < 0.05)
+
+
+top10_RL <- all_markers %>%
+  group_by(cluster) %>%
+  slice_max(n = 100, order_by = avg_log2FC)
+
+top_genes_RL <- top10_RL$gene
+
+# 1. Remove duplicates (recommended)
+top_genes_unique_RL <- unique(top_genes_RL)
+DotPlot(
+  RL_sub,
+  group.by = "predicted_fate",
+  features = top_genes_unique
+) + RotatedAxis()
+
+```
+
+```{r}
+all_markers <- FindAllMarkers(
+  URL_e13_lda,
+  group.by = "med_2p_branch_full",
+  only.pos = TRUE,        # keep only upregulated genes
+  min.pct = 0.25,         # expressed in ≥25% cells
+  logfc.threshold = 0.25  # minimum log fold change
+)
+
+
+all_markers_e13 <- all_markers %>%
+  filter(p_val_adj < 0.05)
+
+
+top10_e13 <- all_markers_e13 %>%
+  group_by(cluster) %>%
+  slice_max(n = 100, order_by = avg_log2FC)
+
+top_genes_e13 <- top10_e13$gene
+
+# 1. Remove duplicates (recommended)
+top_genes_unique_e13 <- unique(top_genes)
+DotPlot(
+  URL_e13_lda,
+  group.by = "med_2p_branch_full",
+  features = top_genes_unique_e13
+) + RotatedAxis()
+
+```
+```{r}
+
+# Genes in list1 but NOT in list2
+genes_only_e13 <- setdiff(top_genes_e13, top_genes_RL)
+print(genes_only_e13)  
+
+```
+
+```{r}
+library(clusterProfiler)
+library(org.Mm.eg.db)
+
+genes <- genes_only_e13
+
+ego <- enrichGO(
+  gene = genes,
+  OrgDb = org.Mm.eg.db,
+  keyType = "SYMBOL",
+  ont = "BP",
+  pAdjustMethod = "BH"
+)
+```
+
+
+```{r}
+ekegg <- enrichKEGG(
+  gene = bitr(genes, fromType = "SYMBOL", toType="ENTREZID", OrgDb=org.Mm.eg.db)$ENTREZID,
+  organism = "mmu"
+)
+
+```
+
+
+```{r}
+FeaturePlot(RL_sub, features = c("Nfia", "Lmx1a", "Nr2f2", "Zfhx3"))
+FeaturePlot(combined_alltp, features = c("Nfia"), max.cutoff = 2)
+FeaturePlot(combined_alltp, features = c("Lmx1a"), max.cutoff = 2)
+FeaturePlot(combined_alltp, features = c( "Nr2f2"), max.cutoff = 2)
+FeaturePlot(URL, features = c("Zfhx3"), max.cutoff = 2)
+
+#FeaturePlot(RL_sub, features = c("Lmx1a", "Lhx9", "Pax6", "Nr2f1"))
+
+```
+
+```{r}
+coef_list <- coef(fit, s= "lambda.min")
+coefs <- coef_list$'Early Medial'
+coefs <- as.matrix(coefs)
+coefs <- coefs[-1, , drop=FALSE]
+
+top_pos <- sort(coefs[,1], decreasing = TRUE)[1:20]
+#top_neg <- sort(coefs[,1], ascending = TRUE)[1:20]
+
+print(top_pos)
+```
+#################################################################################################################################
+######################################################### PERMUTATION TESTS #####################################################
+#################################################################################################################################
+
+
+```{r}
+####### MIX LABELS BUT USE ORIGINAL GENE SET ###########
+
+real_stat <- mean(max_prob)   # simplest + robust
+
+n_perm <- 100
+perm_stats <- numeric(n_perm)
+
+for (i in 1:n_perm) {
+
+  perm_labels <- sample(train_labels)
+
+  fit_perm <- cv.glmnet(
+    x = train_matrix,
+    y = perm_labels,
+    family = "multinomial",
+    alpha = 1
+  )
+
+  perm_probs <- predict(
+    fit_perm,
+    newx = query_matrix,
+    s = "lambda.min",
+    type = "response"
+  )
+
+  perm_prob_mat <- drop(perm_probs[,,1])
+  perm_max <- apply(perm_prob_mat, 1, max)
+
+  perm_stats[i] <- mean(perm_max)
+
+  cat("perm", i, "\n")
+}
+```
+
+
+```{r}
+pval <- mean(perm_stats >= real_stat)
+
+hist(perm_stats,
+     #breaks = 30,
+     col = rgb(0,1,0,0.3), xlim = c(0.1,0.7),
+     main = "Permuting training labels (same gene set)",
+     xlab = "Average probability",
+     ylab = "Frequency")
+abline(v = real_stat, col = "red", lwd = 2)
+```
+
+```{r}
+DimPlot(train_obj, group.by = "perm_label")
+```
+
+```{r}
+####### MIX LABELS BUT AND CHANGE GENE SET ###########
+
+real_stat <- mean(max_prob)   # simplest + robust
+
+n_perm <- 100
+perm_stats <- numeric(n_perm)
+
+for (i in 1:n_perm) {
+  perm_labels <- sample(train_obj$med_2p_branch_full)
+  train_obj$perm_label <- perm_labels
+  Idents(train_obj) <- "perm_label"
+
+  markers <- FindAllMarkers(
+    train_obj,
+    only.pos = TRUE,
+    min.pct = 0.25,
+    logfc.threshold = 0.25
+  )
+  
+  train_features <- markers %>%
+    group_by(cluster) %>%
+    slice_max(avg_log2FC, n = 100) %>%
+    pull(gene) %>%
+    unique()
+  print(train_features)
+  # keep only scaled genes
+  scale_genes <- rownames(GetAssayData(train_obj, layer = "scale.data"))
+  train_features <- intersect(train_features, scale_genes) #CHANGE!!!!
+  train_features <- intersect(train_features, rl_var_genes) #CHANGE!!!!
+  #train_features <- train_features[train_features != "Pax6"]
+  
+  #train_features <- c("Nr2f2", "Nr2f1", "Lmx1a", "Pax5", "Zfhx3", "Nfia", "Nfib")
+  cat("Training features:", length(train_features), "\n")
+  
+  # =============================================================================
+  # 4. BUILD MATRICES
+  # =============================================================================
+  # TRAIN
+  train_data <- GetAssayData(train_obj, layer = "scale.data")[train_features, ]
+  train_matrix <- t(as.matrix(train_data))
+  train_labels <- as.factor(train_obj$perm_label)
+  
+  
+  # =============================================================================
+  # 5. TRAIN LOGISTIC REGRESSION
+  # =============================================================================
+  fit_perm <- cv.glmnet(
+    x = train_matrix,
+    y = perm_labels,
+    family = "multinomial",
+    alpha = 1   # ridge = stable
+  )
+  perm_probs <- predict(
+    fit_perm,
+    newx = query_matrix,
+    s = "lambda.min",
+    type = "response"
+  )
+
+  perm_prob_mat <- drop(perm_probs[,,1])
+  perm_max <- apply(perm_prob_mat, 1, max)
+
+  perm_stats[i] <- mean(perm_max)
+
+  cat("perm", i, "\n")
+}
+
+pval <- mean(perm_stats >= real_stat)
+```
+
+
+```{r}
+hist(perm_stats,
+     #breaks = 30,
+     col = rgb(0,1,0,0.3), xlim = c(0.1,0.7),
+     main = "Permuting training data labels (changing gene set)",
+     xlab = "Average probability",
+     ylab = "Frequency")
+abline(v = real_stat, col = "red", lwd = 2)
+```
+
+```{r}
+####### FIX LABELS BUT AND SHUFFLE MOST EXPLAINABLE GENES ###########
+
+# real stats
+prob_mat <- drop(query_probs[,,1])
+max_prob <- apply(prob_mat, 1, max)
+
+real_mean <- mean(max_prob)
+real_high <- mean(max_prob > 0.7)
+
+coefs <- coef(fit, s = "lambda.min")
+
+get_top_abs <- function(coef_vec, n = 20) {
+  coef_vec <- as.numeric(coef_vec)
+  names(coef_vec) <- rownames(coefs[[1]])
+  coef_vec <- coef_vec[-1]
+  names(sort(abs(coef_vec), decreasing = TRUE)[1:n])
+}
+
+# top genes per class
+top_genes_list <- lapply(coefs, get_top_abs, n = 50)
+
+# union of all
+top_genes <- unique(unlist(top_genes_list))
+
+
+permute_selected_genes <- function(mat, genes) {
+  mat_perm <- mat
+  idx <- which(colnames(mat) %in% genes)
+  for (j in idx) {
+    mat_perm[, j] <- sample(mat[, j])
+  }
+  mat_perm
+}
+
+n_perm <- 100
+perm_target_stats <- numeric(n_perm)
+
+for (i in 1:n_perm) {
+
+
+  ###### 3. TARGETED GENE PERMUTATION ######
+  query_perm <- permute_selected_genes(query_matrix, top_genes)
+
+  probs <- predict(fit, newx = query_perm, s = "lambda.min", type = "response")
+  pm <- drop(probs[,,1])
+  perm_target_stats[i] <- mean(apply(pm, 1, max))
+
+
+  cat("perm", i, "\n")
+}
+
+p_target <- mean(perm_target_stats >= real_mean)
+
+
+
+hist(perm_target_stats,
+     #breaks = 30,
+     col = rgb(0,1,0,0.3), xlim = c(0.4,0.8),
+     main = "Permuting explanatory genes in query data",
+     xlab = "Average probability",
+     ylab = "Frequency")
+
+abline(v = real_mean, col = "red", lwd = 3)
+
+```

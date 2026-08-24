@@ -1,0 +1,680 @@
+
+```{r}
+## NOW LOOK AT INHIBITORY NEURONS VENTRICULAR ZONE DATA
+```
+
+
+```{r cars}
+library(Seurat)
+#library(SeuratDisk)
+#library(SeuratData)
+library(ggplot2)
+library(patchwork)
+library(dplyr)
+#library(sceasy)
+library(reticulate)
+#library(rliger)
+library(magrittr) # needs to be run every time you start R and want to use %>%
+library(dplyr) 
+#library(anndata)
+library(Seurat)
+library(tidyverse)
+library(SeuratWrappers)
+library(harmony)
+library(batchelor)
+```
+
+
+```{r}
+dev_int <-readRDS("scrnaseq_all_inhib/cb_dev_annotated.RDS")
+metadata <- dev_int@meta.data
+dev_int <- CreateSeuratObject(counts = dev_int@assays$RNA$counts, assay = "RNA")
+dev_int[["percent.mito"]] <- PercentageFeatureSet(object = dev_int, pattern = "^mt-")
+dev_int <- subset(dev_int, subset = nFeature_RNA > 500 & nFeature_RNA < 5000 & percent.mito < 8 & nCount_RNA < 20000)
+dev_int[["RNA"]]$data <- dev_int[["RNA"]]$counts
+dev_int <- AddMetaData(dev_int, metadata = metadata)
+#e16_1 <- subset(e16_1, subset = Meis2 > 1)
+dev_int@meta.data$batch <- dev_int$orig.ident
+dev_int@meta.data$timepoint <- dev_int$orig.ident
+dev_int@meta.data$dataset <- dev_int$orig.ident
+dev_int@meta.data$dataset <- dev_int$orig.ident
+dev_int@meta.data$cell_type <- dev_int$cluster
+dev_int@meta.data$collector <- "macosko"
+
+```
+
+
+
+```{r}
+cdS_inhib_save_cn <-readRDS("scrnaseq_all_inhib/cds_inhib_li2025.Rds")
+metadata <- cdS_inhib_save_cn@meta.data
+cdS_inhib_save_cn <- CreateSeuratObject(counts = cdS_inhib_save_cn@assays$RNA$counts)
+cdS_inhib_save_cn <- AddMetaData(cdS_inhib_save_cn, metadata)
+cdS_inhib_save_cn[["percent.mito"]] <- PercentageFeatureSet(object = cdS_inhib_save_cn, pattern = "^mt-")
+cdS_inhib_save_cn <- subset(cdS_inhib_save_cn, subset = nFeature_RNA > 100 & nFeature_RNA < 10000 & percent.mito < 8 & nCount_RNA < 20000)
+#e18[["RNA"]]$data <- e18[["RNA"]]$counts
+cdS_inhib_save_cn$collector <- "li2"
+cdS_inhib_save_cn$dataset <- "li2"
+cdS_inhib_save_cn@meta.data$cell_type <- "unknown"
+
+```
+
+```{r}
+# Load libraries
+library(reticulate)
+library(Seurat)
+#library(sceasy)
+
+options(Seurat.object.assay.version = 'v5')
+convert_anndata_to_seurat <- function(anndata_obj, batch = FALSE) {
+  anndata_obj$obs_names_make_unique()
+
+  # Extract the data from the AnnData object
+  counts <- t(as.matrix(anndata_obj$X))  # Transpose the data matrix
+  var_names <- py_to_r(anndata_obj$var_names)
+  obs_names <- py_to_r(anndata_obj$obs_names)
+  
+  # Create a Seurat object
+  rownames(counts) <- var_names
+  colnames(counts) <- obs_names
+  seurat_obj <- CreateSeuratObject(counts = counts, project = "ConvertedAnndata")
+  
+  # Add metadata if batch is TRUE
+  if (batch) {
+    batch_data <- py_to_r(anndata_obj$obs$batch)
+    seurat_obj <- AddMetaData(object = seurat_obj, metadata = batch_data, col.name = 'batch')
+  }
+  
+  # Filter by nFeature_RNA
+  seurat_obj <- subset(seurat_obj, subset = nFeature_RNA > 2 & nFeature_RNA < 1000)
+
+  # Filter out genes with zero counts
+  counts_matrix <- GetAssayData(seurat_obj, slot = "counts")
+  seurat_obj <- subset(seurat_obj, features = rownames(counts_matrix)[Matrix::rowSums(counts_matrix) > 3])
+  
+  return(seurat_obj)
+}
+
+# Example usage:
+# seurat_object <- convert_anndata_to_seurat(anndata_object)
+
+# Save the Seurat object to an RDS file
+# saveRDS(seurat_object, file = "path/to/save/seurat_object.rds")
+```
+
+
+```{r}
+# Load in data!!
+
+e17_bl <- readRDS("scrnaseq_all_inhib/seurat_sub_inhib_all_blackshaw.rds")
+##metadata <- e17_bl@meta.data
+#e#17_bl <- CreateSeuratObject(counts = e17_bl[['RNA']]$, project = "e11_data", min.cells = 3, min.features = 200)
+#e17_bl <- AddMetaData(e17_bl, metadata)
+DefaultAssay(e17_bl) <- "RNA"
+e17_bl[["SCT"]] <- NULL
+e17_bl@meta.data$timepoint <- "E17"
+e17_bl$collector <- "me"
+e17_bl@meta.data$dataset <- "blackshawTSO"
+
+```
+
+
+```{r}
+# Load in data!!
+
+e10_13_li_inhib <- readRDS("scrnaseq_all_inhib//E10_13_final.rds")
+e10_13_li_inhib[['RNA']] <- e10_13_li_inhib[['SCT']]
+metadata <- e10_13_li_inhib@meta.data
+e10_13_li_inhib <- CreateSeuratObject(counts = e10_13_li_inhib[['RNA']]@counts, project = "e11_data", min.cells = 3, min.features = 200)
+e10_13_li_inhib <- AddMetaData(e10_13_li_inhib, metadata)
+e10_13_li_inhib <- subset(e10_13_li_inhib, subset = cellType %in% c("CN.gaba", "GABA.Pre1", "C4.Otp", "C4", "C4.Otp.Pre", "GABA.Pre", "GABA.Pro","PC"))
+e10_13_li_inhib@meta.data$batch <- e10_13_li_inhib@meta.data$dataset
+e10_13_li_inhib@meta.data$timepoint <- e10_13_li_inhib@meta.data$stage
+e10_13_li_inhib[["percent.mito"]] <- PercentageFeatureSet(object = e10_13_li_inhib, pattern = "^mt-")
+e10_13_li_inhib <- subset(e10_13_li_inhib, subset = nFeature_RNA > 100 & nFeature_RNA < 10000 & percent.mito < 8 & nCount_RNA < 20000)
+#e18[["RNA"]]$data <- e18[["RNA"]]$counts
+e10_13_li_inhib$collector <- "li"
+e10_13_li_inhib@meta.data$cell_type <- e10_13_li_inhib$cellType1
+
+#e10_13_li_inhib@meta.data$dataset <- "li"
+
+```
+
+```{r}
+# Load required libraries
+library(Seurat)
+library(biomaRt)
+
+# Load the dataset
+mouse <- readRDS("scrnaseq_all_inhib/mou_exonic_sce_final (1).rds")
+mouse <- as.Seurat(mouse, counts = "umi", data = "umi")
+
+# Get the counts matrix
+counts_matrix <- GetAssayData(mouse, slot = "counts")
+
+# Create Seurat object while preserving metadata
+mouse_seurat <- CreateSeuratObject(counts = counts_matrix, meta.data = mouse@meta.data)
+
+# Subset specific cell types
+mouse_seurat_1 <- subset(mouse_seurat, subset = cell_type %in% c("GABA_DN", "VZ_neuroblast","interneuron" , "Purkinje"))
+mouse_seurat <- JoinLayers(merge(mouse_seurat_1))
+# Add metadata annotations
+mouse_seurat@meta.data$dataset <- mouse_seurat@meta.data$Capture.System
+mouse_seurat@meta.data$timepoint <- mouse_seurat@meta.data$Stage
+
+# Ensure rownames are unique before mapping
+rownames(mouse_seurat) <- make.unique(rownames(mouse_seurat))
+
+# Save original rownames and counts to verify mapping later
+original_rownames <- rownames(mouse_seurat)
+original_counts <- mouse_seurat@assays$RNA$counts
+```
+
+
+```{r}
+library(AnnotationDbi)
+library(org.Mm.eg.db)
+
+# Map Ensembl gene IDs to symbols
+ensembl_ids <- rownames(mouse_seurat)
+mapped <- AnnotationDbi::select(
+  org.Mm.eg.db,
+  keys = ensembl_ids,
+  keytype = "ENSEMBL",
+  columns = c("SYMBOL")
+)
+
+# Ensure unique names and align with original
+mapped <- mapped[match(ensembl_ids, mapped$ENSEMBL), ]
+new_gene_names <- make.unique(mapped$SYMBOL)
+rownames(mouse_seurat) <- new_gene_names
+```
+```{r}
+#test_query <- getBM(attributes = c("ensembl_gene_id", "external_gene_name"),filters = "ensembl_gene_id",values = "ENSMUSG00000064370",mart = mart)
+options(dbplyr.lazy = FALSE)
+
+# Step 4: Remove genes with NA or empty names
+valid_genes <- which(!is.na(new_gene_names) & new_gene_names != "")
+mouse_seurat_filtered <- mouse_seurat[valid_genes, ]
+
+# Step 5: Verify that gene names correspond to the same rows of counts
+set.seed(42)  # For reproducibility
+random_rows <- sample(rownames(mouse_seurat_filtered), 5)
+mouse_seurat_filtered[["percent.mito"]] <- PercentageFeatureSet(object = mouse_seurat_filtered, pattern = "^mt-")
+mouse_seurat_filtered <- subset(mouse_seurat_filtered, subset = nFeature_RNA > 500 & nFeature_RNA < 5000 & percent.mito < 8 & nCount_RNA < 20000)
+mouse_seurat_filtered$collector <- "sepp"
+mouse_seurat_filtered@meta.data$cell_type <- mouse_seurat_filtered$cell_type
+
+# Compare original and new counts for selected genes
+```
+
+
+
+
+```{r}
+# Assuming 'processed_seurat_obj' is your processed Seurat object
+load("scrnaseq_all_inhib/GSM4873765_mouse_data")
+# Step 1: Extract the counts matrix
+counts_matrix <- GetAssayData(VZ, slot = "counts")
+# Step 2: Extract the metadata
+metadata <- VZ@meta.data
+# Step 3: Create a new Seurat object with counts and metadata
+VZ_new <- CreateSeuratObject(counts = counts_matrix, meta.data = metadata,project = "NewProjectName")
+VZ_new@meta.data$timepoint <- "Adult"
+VZ_new@meta.data$batch <- "3_starmap"
+VZ_new@meta.data$dataset <- VZ_new@meta.data$orig.ident
+VZ_new$collector <- "kebschull"
+VZ_new@meta.data$cell_type <- VZ_new$final.clusters2
+
+VZ_i1 <- subset(VZ_new, final.clusters == "inh_1")
+```
+
+
+```{r}
+#VZ_new <- subset(VZ_new, subset = percent.mito < 8 & nCount_RNA < 20000)
+VZ_i1 <- NormalizeData(VZ_i1) 
+VZ_i1 <- ScaleData(VZ_i1) 
+
+VZ_i1 <- FindVariableFeatures(VZ_i1) 
+VZ_i1 <- RunPCA(VZ_i1)
+VZ_i1 <- RunUMAP(VZ_i1, reduction = "pca", dims = 1:30, ) 
+
+
+```
+
+
+
+```{r}
+VZ_i1 <- FindNeighbors(VZ_i1) 
+VZ_i1 <- FindClusters(VZ_i1) 
+DimPlot(VZ_i1, reduction = "umap", group.by = c("final.clusters", "DCN"))
+```
+```{r}
+library(Seurat)
+library(dplyr)
+
+# Assuming your Seurat object is named 'seurat_obj' and already clustered
+Idents(VZ_i1) <- "DCN"
+
+# Step 1: Find all positive markers for each cluster
+markers <- FindAllMarkers(
+  VZ_i1,
+  group.by = "DCN",
+  only.pos = TRUE,
+  min.pct = 0.4,
+  logfc.threshold = 0.4
+)
+
+# Step 2: Get top 10 markers per cluster by log2 fold-change
+top_markers <- markers %>%
+  group_by(cluster) %>%
+  top_n(n = 5, wt = avg_log2FC)
+
+# Step 3: Plot heatmap of top markers
+DoHeatmap(VZ_i1, features = top_markers$gene) +
+  theme(axis.text.y = element_text(size = 6))
+
+```
+```{r}
+VlnPlot(VZ_i1, group.by = "DCN", features = c("Foxp2", "Foxp1", "Foxo3"))
+```
+
+
+```{r}
+cdS_inhib_all <- merge(mouse_seurat_filtered, y = c(e10_13_li_inhib,  VZ_new, cdS_inhib_save_cn, dev_int, e17_bl))
+#cdS_inhib_all <- merge(cdS_inhib_save_cn, y = c(e14_joyner.subsampled, e10_13_li_inhib,  VZ_new))
+#cdS_inhib_save_cn <- FindVariableFeatures(cdS_inhib_save_cn, nfeatures = 1000)
+#mouse_seurat_filtered <- FindVariableFeatures(mouse_seurat_filtered, nfeatures = 1000)
+
+#VZ_new <- FindVariableFeatures(VZ_new, nfeatures = 1000)
+#e14_joyner.subsampled <- FindVariableFeatures(e14_joyner.subsampled, nfeatures = 1000)
+#e10_13_li_inhib <- FindVariableFeatures(e10_13_li_inhib, nfeatures = 1000)
+```
+
+
+```{r}
+cdS_inhib_all <- JoinLayers(cdS_inhib_all)
+total.genes <- list(rownames(cdS_inhib_save_cn),
+                   rownames(mouse_seurat_filtered),
+                   rownames(VZ_new),
+                   #rownames(e14_joyner.subsampled),
+                   rownames(e10_13_li_inhib),
+                   rownames(dev_int),
+                   rownames(e17_bl))
+
+common.genes <- Reduce(f = intersect, x = total.genes)
+
+cdS_inhib_all <- subset(cdS_inhib_all, features = common.genes)
+```
+
+```{r} 
+#cdS <- e10_13_li
+cdS_inhib_all <- NormalizeData(cdS_inhib_all, verbose = F) %>% ScaleData() #%>% FindVariableFeatures(n_features = 500) %>% RunPCA() #%>% RunHarmony("orig.ident") %>% RunUMAP(dims=1:30, reduction = "harmony") 
+#cdS_inhib_all <- ScaleData(cdS_inhib_all)
+#cdS_inhib_all <- SCTransform(cdS_inhib_all) %>% RunPCA()
+#cdS_inhib_all <- FindVariableFeatures(cdS_inhib_all, selection.method = "vst", nfeatures = 2000)
+```
+
+
+```{r} 
+#cdS_list <- SplitObject(cdS_inhib_all, split.by = "dataset")
+
+# Convert Seurat objects to SingleCellExperiment objects
+#sce_list <- lapply(cdS_list, as.SingleCellExperiment)
+
+# Run fastMNN manually
+#mnn_result <- fastMNN(sce_list)
+
+# Convert back to Seurat
+#cdS_inhib_all.mnn <- as.Seurat(mnn_result)
+
+cdS_inhib_all.mnn <- RunFastMNN(object.list = SplitObject(cdS_inhib_all, split.by = "dataset"),  features =500,assay = "RNA", verbose = FALSE)
+
+#cdS_inhib_all.mnn <- RunFastMNN(object.list = SplitObject(cdS_inhib_all, split.by = "dataset"), assay = "RNA", verbose = FALSE)
+cdS_inhib_all[["mnn"]] <- CreateDimReducObject(Embeddings(cdS_inhib_all.mnn, reduction = "mnn"), assay = "RNA")
+
+```
+
+```{r}
+cdS_inhib_all <- RunUMAP(cdS_inhib_all, reduction = "mnn", nn.method = "rann", dims = 1:40, min.dist = 0.5, spread = 1)
+```
+
+```{r}
+DimPlot(cdS_inhib_all, reduction = "umap", group.by = 'timepoint', shuffle = TRUE)
+DimPlot(cdS_inhib_all, group.by = c( "cell_type"), shuffle = TRUE)
+DimPlot(cdS_inhib_all, group.by = c( "collector"), shuffle = TRUE)
+FeaturePlot(cdS_inhib_all, features = c( "Ptf1a"))
+FeaturePlot(cdS_inhib_all, features = c( "Zfhx3"))
+FeaturePlot(cdS_inhib_all, features = c( "Sox14"))
+FeaturePlot(cdS_inhib_all, features = c( "Pax2"))
+FeaturePlot(cdS_inhib_all, features = c( "Gad1"))
+FeaturePlot(cdS_inhib_all, features = c( "Slc6a5"))
+FeaturePlot(cdS_inhib_all, features = c( "Kit"))
+FeaturePlot(cdS_inhib_all, features = c( "Zfhx3"))
+FeaturePlot(cdS_inhib_all, features = c( "Sorcs3"))
+DimPlot(cdS_inhib_all, group.by = c( "subtype"), shuffle = TRUE)
+DimPlot(cdS_inhib_all, group.by = c( "DCN"), shuffle = TRUE)
+DimPlot(cdS_inhib_all, group.by = c( "cellType1"), shuffle = TRUE)
+DimPlot(cdS_inhib_all, group.by = c( "cluster"), shuffle = TRUE)
+DimPlot(cdS_inhib_all, group.by = c( "final.clusters"), shuffle = TRUE)
+DimPlot(cdS_inhib_all, group.by = c( "DCN"), shuffle = TRUE)
+
+```
+
+```{r}
+# Capitalize first letter
+cdS_inhib_all$collector <- tools::toTitleCase(cdS_inhib_all$collector)
+
+# Rename "Me" to "Anant"
+cdS_inhib_all$collector[cdS_inhib_all$collector == "Me"] <- "Anant"
+
+p <- DimPlot(cdS_inhib_all, group.by = "collector")
+p
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/inhib_collector.png",
+  plot = p,
+  width = 7,
+  height = 5)
+
+
+p <- DimPlot(cdS_inhib_all, group.by = "orig.ident")
+p
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/inhib_orig.ident.png",
+  plot = p,
+  width = 7,
+  height = 5)
+```
+
+
+```{r}
+FeaturePlot(cdS_inhib_all, features = c("Foxp2"))
+FeaturePlot(cdS_inhib_all, features = c("Cdh10"))
+FeaturePlot(cdS_inhib_all, features = c("Foxp1"))
+FeaturePlot(cdS_inhib_all, features = c("Pcdh19"))
+FeaturePlot(cdS_inhib_all, features = c("Meis2"))
+FeaturePlot(cdS_inhib_all, features = c("Slc17a6", "Gad1"))
+FeaturePlot(cdS_inhib_all, features = c("Slc6a5"))
+
+```
+
+
+
+```{r}
+cdS_inhib_all <- FindNeighbors(cdS_inhib_all, reduction = "mnn")
+cdS_inhib_all <- FindClusters(cdS_inhib_all, resolution = 2)
+```
+
+
+
+```{r}
+DimPlot(cdS_inhib_all, reduction = "umap", group.by = 'RNA_snn_res.2', shuffle = TRUE, label = TRUE)
+
+```
+
+
+
+```{r}
+# Exclude cluster 5, for example
+cdS_inhib_all_filter <- subset(cdS_inhib_all, subset = RNA_snn_res.2 != "20")
+cdS_inhib_all_filter <- subset(cdS_inhib_all_filter, subset = RNA_snn_res.2 != "25")
+
+```
+
+
+```{r}
+Idents(cdS_inhib_all_filter) <- "RNA_snn_res.2"
+cdS_inhib_all_filter <- RenameIdents(cdS_inhib_all_filter, "0"= "Purkinje Cells", "1"= "Purkinje Cells", "2"="PC+i1 Prog", "3"="Purkinje Cells", "4"="Interneurons", "5"="PC+i1 Prog", "6"="Interneurons","7"="PC+i1 Prog", "8"="PC+i1 Prog", "9"="i1 DCN", "10"="i1 DCN","11"="i1 DCN", "12"="VZ", "13"= "Interneurons", "14"="Interneurons", "15"= "Interneurons", "16"= "VZ", "17"= "Interneurons", "18"="MLI", "19"="MLI", "21"="MLI","22"= "MLI", "23"= "VZ", "24"= "MLI", "25"="VZ") 
+```
+
+
+
+```{r}
+DimPlot(cdS_inhib_all_filter, reduction = "umap", group.by = 'timepoint', shuffle = TRUE)
+DimPlot(cdS_inhib_all_filter, group.by = c( "ident"), shuffle = TRUE)
+DimPlot(cdS_inhib_all_filter, group.by = c( "collector"), shuffle = TRUE)
+FeaturePlot(cdS_inhib_all_filter, features = c( "Pax2"))
+FeaturePlot(cdS_inhib_all_filter, features = c( "Robo3"))
+DimPlot(cdS_inhib_all_filter, group.by = c( "DCN"), shuffle = TRUE)
+```
+```{r}
+cluster_cols <- c(
+  "Purkinje Cells"    = "#B22",
+  "Interneurons"       = "#4F7942",
+  "VZ" = "lightblue",
+  "PC+i1 Prog" = "#BDA55D",
+  "i2 DCN"         = "#984EA3",
+  "i1 DCN"         = "#F5A33E",
+  "MLI"        = "#FF8DA1"
+)
+
+DimPlot(cdS_inhib_all_filter, cols = cluster_cols , group.by = c( "ident"), shuffle = TRUE)
+
+```
+
+
+
+
+```{r}
+cdS_inhib_all_filter$timepoint[cdS_inhib_all_filter$timepoint == "adult"] <- "Adult"
+DimPlot(cdS_inhib_all_filter, group.by = c( "final.clusters2"), shuffle = TRUE)
+
+```
+
+
+
+
+```{r}
+Idents(cdS_inhib_all_filter) <- "RNA_snn_res.1"
+DimPlot(cdS_inhib_all_filter, reduction = "umap", group.by = 'timepoint', shuffle = TRUE)
+DimPlot(cdS_inhib_all_filter, group.by = c( "ident"), shuffle = TRUE, label = TRUE)
+DimPlot(cdS_inhib_all_filter, group.by = c( "collector"), shuffle = TRUE)
+FeaturePlot(cdS_inhib_all_filter, features = c( "Pax2"))
+FeaturePlot(cdS_inhib_all_filter, features = c( "Robo3"))
+DimPlot(cdS_inhib_all_filter, group.by = c( "DCN"), shuffle = TRUE)
+DimPlot(cdS_inhib_all_filter, group.by = c( "final.clusters2"), shuffle = TRUE)
+
+```
+
+
+```{r}
+p <- DimPlot(cdS_inhib_all_filter, group.by = c( "ident"), cols = cluster_cols, shuffle = TRUE, label = FALSE, label.size = 4, repel=TRUE)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/inhibitory_mouse_umaps/inhib_cell_type.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+p <- DimPlot(cdS_inhib_all_filter, group.by = c( "ident"), cols = cluster_cols, shuffle = TRUE, label = FALSE, label.size = 4, repel=TRUE)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/inhibitory_mouse_umaps/inhib_cell_type.svg",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+```
+```{r}
+p <- DimPlot(cdS_inhib_all_filter, group.by =  "DCN", shuffle = TRUE, label = FALSE, label.size = 4, repel=TRUE)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/inhibitory_mouse_umaps/inhib_dcn.svg",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+p <- DimPlot(cdS_inhib_all_filter, group.by = c( "timepoint"),  shuffle = TRUE, label = FALSE, label.size = 4, repel=TRUE)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/inhibitory_mouse_umaps/inhib_timepoint.svg",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+```
+
+
+```{r}
+
+p<- FeaturePlot(cdS_inhib_all, features = c("Foxp2"), min.cutoff = 0, max.cutoff = 2)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/inhibitory_mouse_umaps/inhib_foxp2.svg",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+p <- DimPlot(cdS_inhib_all_filter, group.by = c( "collector"), cols = cluster_cols, shuffle = TRUE, label = FALSE, label.size = 4, repel=TRUE)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/inhibitory_mouse_umaps/inhib_collector.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+p <- DimPlot(cdS_inhib_all_filter, group.by = c( "orig.ident"), cols = cluster_cols, shuffle = TRUE, label = FALSE, label.size = 4, repel=TRUE)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/inhibitory_mouse_umaps/inhib_origident.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+```
+
+
+```{r}
+cell_order <- rev(c(
+  "PC+i1 Prog",
+  "Purkinje Cells",
+  "i1 DCN",
+  "i2 DCN",
+  "Interneurons",
+  "MLI", 
+  "VZ"
+))
+
+Idents(cdS_inhib_all_filter) <- factor(
+  Idents(cdS_inhib_all_filter),
+  levels = cell_order
+)
+
+
+all_markers <- FindAllMarkers(
+  cdS_inhib_all_filter,
+  group.by = "ident",
+  only.pos = TRUE,
+  min.pct = 0.5,
+  logfc.threshold = 0.5
+)
+
+# 5. Get top 10 genes per cluster
+top10_markers <- all_markers %>%
+  group_by(cluster) %>%
+  slice_max(n =4, order_by = avg_log2FC)
+
+# 6. View results
+head(top10_markers)
+```
+
+
+```{r}
+p <- DotPlot(
+  cdS_inhib_all_filter,
+  features = top10_markers$gene,
+  #group.by = "ident",
+  assay = "RNA",
+  #group.by = 'med_2p_branch_full',
+  cols = c('yellow', 'purple'),
+  dot.min = -0.6,
+  dot.scale = 10,
+  col.min = -1,
+  col.max = 2
+  #min.pct = 0.25
+) + 
+  scale_fill_gradient2(
+    low = "yellow",
+    mid = "yellow",
+    high = "purple",
+    midpoint = 0
+  ) +
+  RotatedAxis() +
+  theme(
+    axis.text.x = element_text(
+      angle = 90,   # vertical text
+      hjust = 1,
+      vjust = 0.5,
+      family = "Arial"
+    ),
+    axis.text.y = element_text(family = "Arial"),
+    text = element_text(family = "Arial")
+  )
+
+p
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/inhibitory_mouse_umaps/inhib_dotplot.svg",
+  plot = p,
+  width = 10,
+  height = 5,
+)
+```
+
+```{r}
+library(dplyr)
+
+# Collector counts
+collector_counts <- table(cdS_inhib_all_filter$collector)
+
+cdS_inhib_all_filter$collector_counts <- paste0(
+  cdS_inhib_all_filter$collector,
+  " (",
+  collector_counts[cdS_inhib_all_filter$collector],
+  ")"
+)
+
+# Sample counts
+sample_counts <- table(cdS_inhib_all_filter$orig.ident)
+
+cdS_inhib_all_filter$sample_counts <- paste0(
+  cdS_inhib_all_filter$orig.ident,
+  " (",
+  sample_counts[cdS_inhib_all_filter$orig.ident],
+  ")"
+)
+
+p <- DimPlot(cdS_inhib_all_filter, group.by  = "sample_counts")
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/tables/mouse_inhib_sample_counts.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+p <- DimPlot(cdS_inhib_all_filter, group.by  = "collector_counts")
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/tables/mouse_inhib_collector_counts.svg",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+```
+

@@ -1,0 +1,959 @@
+
+```{r}
+## Create figures for FIG 1/2 -- EXCITATORY NEURONS
+```
+
+
+```{r cars}
+library(Seurat) 
+#library(SeuratDisk)
+#library(SeuratData)
+library(ggplot2)
+library(patchwork)
+library(dplyr)
+#library(sceasy)
+library(reticulate)
+#library(rliger)
+library(magrittr) # needs to be run every time you start R and want to use %>%
+library(dplyr) 
+library(Seurat)
+library(tidyverse)
+library(SeuratWrappers)
+library(harmony)
+library(batchelor)
+library(usethis)
+library(Seurat)
+library(monocle3)
+library(dplyr)
+```
+
+
+```{r}
+all_data <- readRDS("all_data.rds")
+```
+
+
+
+
+```{r}
+all_data = FindNeighbors(all_data)
+all_data = FindClusters(all_data, resolution = 2)
+# Set 'RNA_snn_res.0.3' as the active identity class
+```
+
+
+```{r}
+DefaultAssay(all_data) <- "RNA"
+Idents(all_data) <- "RNA_snn_res.2"
+VlnPlot(
+  all_data,
+  features = "En1",
+  group.by = "seurat_clusters"
+)
+VlnPlot(
+  all_data,
+  features = "En2",
+  group.by = "seurat_clusters"
+)
+```
+```{r}
+URL <- subset(
+  all_data,
+  subset = seurat_clusters %in% c(
+    "26", "27", "24", "3", "28", "36",
+    "38", "10", "21", "31", "39", "30",
+    "29", "35", "5"
+  )
+)
+```
+
+
+
+
+
+```{r}
+DimPlot(URL,label = TRUE)
+```
+
+
+
+
+```{r}
+
+URL.mnn <- RunFastMNN(object.list = SplitObject(URL, split.by = "Sample"), assay = "RNA", features = 5000, verbose = FALSE)
+URL[["mnn"]] <- CreateDimReducObject(Embeddings(URL.mnn, reduction = "mnn"), assay = "RNA")
+
+```
+
+```{r}
+URL <- FindNeighbors(URL, reduction = "mnn", dims = 1:50)
+
+URL <- RunUMAP(URL, reduction = "mnn", dims = 1:50, spread = 3, min.dist = 0.3)
+```
+
+
+```{r}
+DimPlot(URL, reduction = "umap", group.by = 'TimePoint') + NoAxes()
+DimPlot(URL, reduction = "umap", group.by = 'branch', label = TRUE) + NoAxes()
+FeaturePlot(URL, feature = "Pax6", max.cutoff = 2)
+FeaturePlot(URL, feature = "Lhx9", max.cutoff = 2)
+
+```
+
+```{r}
+p <- DimPlot(URL, group.by = "Sample")
+p
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/URL_Sample.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+```
+
+
+```{r}
+URL <- FindNeighbors(URL, reduction = "mnn")
+URL <- FindClusters(URL, resolution = 2)
+DimPlot(URL, group.by = "RNA_snn_res.2", label = TRUE)
+
+
+```
+
+```{r}
+DefaultAssay(URL) <- "RNA"
+URL <- FindClusters(URL, resolution = 1.5)
+
+```
+
+
+```{r}
+URL$collector <- "Butts"
+
+p <- DimPlot(URL, group.by = "collector")
+p
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/URL_collector.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+```
+
+```{r}
+FeaturePlot(URL, features = "Reln", max.cutoff = 2)
+FeaturePlot(URL, features = "Zfhx3", max.cutoff = 2)
+FeaturePlot(URL, features = "Meis2", max.cutoff = 2)
+FeaturePlot(URL, features = "Lmx1a", max.cutoff = 2)
+
+```
+
+```{r}
+FeaturePlot(URL, features = "Nr2f1", max.cutoff = 2)
+FeaturePlot(URL, features = "Isl1", max.cutoff = 2)
+FeaturePlot(URL, features = "Casz1", max.cutoff = 2)
+
+FeaturePlot(URL, features = "Pcp4", max.cutoff = 2)
+FeaturePlot(URL, features = "Nfia", max.cutoff = 2)
+
+```
+
+
+```{r}
+URL$cell_type_coarse <- recode(URL$RNA_snn_res.1.5,
+    "0" = "Interposed/LateralDCN", 
+    "1" = "Granule Cells+UBCs",
+    "2" = "Extracerebellar-fated", 
+    "3" = "RL",
+    "4" = "Granule Cells+UBCs", 
+    "5" = "RL",
+    "6" = "Granule Cells+UBCs", 
+    "7" = "Extracerebellar-fated",
+    "8" = "Extracerebellar-fated", 
+    "9" = "Extracerebellar-fated",
+    "10" = "Granule Cells+UBCs", 
+    "11" = "Granule Cells+UBCs",
+    "12" = "Extracerebellar-fated",
+    "13" = "Extracerebellar-fated", 
+    "14" = "RL",
+    "15" = "Granule Cells+UBCs", 
+    "16" = "Interposed/LateralDCN",
+    "17" = "RL", 
+    "18" = "Medial DCN",
+    "19" = "Extracerebellar-fated",
+    "20" = "Interposed/LateralDCN", 
+    "21" = "Medial DCN",
+    "22" = "Interposed/LateralDCN", 
+    "23" = "Granule Cells+UBCs",
+    "24" = "Extracerebellar-fated", 
+    "25" = "Granule Cells+UBCs",
+    "26" = "Extracerebellar-fated", 
+    "27" = "Extracerebellar-fated"
+)
+
+```
+
+
+```{r}
+DimPlot(URL, group.by = "cell_type_coarse") + NoAxes()
+```
+```{r}
+colors = c("Medial DCN"="blue", "Granule Cells+UBCs"="purple", "Interposed/LateralDCN"="orange", "Extracerebellar-fated"="black", "RL" = "lightblue")
+
+p <-DimPlot(URL, group.by = "cell_type_coarse", cols = colors) + NoAxes()
+
+ggsave("C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/cerebellum_2branch_branches_cncombined.svg", plot = p, width = 8, height = 6, units = "in", dpi = 300)
+
+colors = c("Medial DCN"="blue", "Granule Cells+UBCs"="purple", "Interposed/LateralDCN"="blue", "Extracerebellar-fated"="black", "RL" = "lightblue")
+
+p <-DimPlot(URL, group.by = "cell_type_coarse", cols = colors) + NoAxes()
+
+ggsave("C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/cerebellum_2branch_branches_cncombined.png", plot = p, width = 8, height = 6, units = "in", dpi = 300)
+
+
+p <-DimPlot(URL, group.by = "cell_type_coarse", cols = colors) + NoAxes()
+
+ggsave("C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/cerebellum_2branch_branche_cncombineds.png", plot = p, width = 8, height = 6, units = "in", dpi = 300)
+p
+```
+
+```{r}
+all_markers <- FindAllMarkers(
+  URL,
+  group.by = "cell_type_coarse",
+  only.pos = TRUE,
+  min.pct = 0.75,
+  logfc.threshold = 0.25
+)
+```
+
+
+```{r}
+# 5. Get top 10 genes per cluster
+top10_markers <- all_markers %>%
+  group_by(cluster) %>%
+  slice_max(n = 5, order_by = avg_log2FC)
+
+# 6. View results
+head(top10_markers)
+```
+
+
+```{r}
+top10_markers_unique <- unique(as.character(top10_markers$gene))
+p <- DotPlot(
+  URL,
+  features = top10_markers_unique,
+  group.by = "cell_type_coarse",
+  assay = "RNA",
+  cols = c("yellow", "purple"),
+  dot.scale = 10,
+  scale.by = "radius",
+  col.min = 0,
+  col.max = 1
+) +
+  scale_fill_gradient2(
+    low = "yellow",
+    mid = "yellow",
+    high = "purple",
+    midpoint = 0
+  ) +
+  RotatedAxis() +
+  theme(
+    axis.text.x = element_text(
+      angle = 90,
+      hjust = 1,
+      vjust = 0.5,
+      family = "Arial"
+    ),
+    axis.text.y = element_text(family = "Arial"),
+    text = element_text(family = "Arial")
+  )
+
+p
+```
+
+
+```{r}
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/mouse_exc_dotplot.svg",
+  plot = p,
+  width = 12,
+  height = 5,
+)
+```
+
+
+
+```{r}
+URL <- FindClusters(URL, resolution = 1)
+```
+
+
+```{r}
+URL$branch <- recode(URL$RNA_snn_res.1,
+    "0" = "early", 
+    "1" = "transition",
+    "2" = "early", 
+    "3" = "transition",
+    "4" = "early", 
+    "5" = "late",
+    "6" = "transition", 
+    "7" = "early",
+    "8" = "early", 
+    "9" = "early",
+    "10" = "early", 
+    "11" = "late",
+    "12" = "late",
+    "13" = "late", 
+    "14" = "early",
+    "15" = "late", 
+    "16" = "late",
+    "17" = "early", 
+    "18" = "late",
+    "19" = "late",
+    "20" = "early"
+  
+    # Add more as needed
+)
+```
+
+```{r}
+DimPlot(URL, group.by = "branch")
+
+```
+```{r}
+URL <- subset(URL, Mki67 == 0)
+URL <- subset(URL, Top2a == 0)
+
+```
+
+```{r}
+saveRDS(URL, "URL_082026.rds")
+```
+
+```{r}
+URL <- readRDS("URL_082026.rds")
+```
+
+
+```{r}
+p <- DimPlot(URL, reduction = "umap", group.by = 'TimePoint') + NoAxes()
+ggsave("C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/allURL_timepoint.png", plot = p, width = 8, height = 6, units = "in", dpi = 300)
+
+p <- DimPlot(URL, reduction = "umap", group.by = 'Sample') + NoAxes()
+ggsave("C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/allURL_sample.png", plot = p, width = 8, height = 6, units = "in", dpi = 300)
+
+p <- FeaturePlot(URL, reduction = "umap", features = 'Pax6') + NoAxes()
+ggsave("C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/allURL_Pax6.png", plot = p, width = 8, height = 6, units = "in", dpi = 300)
+
+p <- FeaturePlot(URL, reduction = "umap", features = 'Lhx9') + NoAxes()
+ggsave("C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/allURL_Lhx9.png", plot = p, width = 8, height = 6, units = "in", dpi = 300)
+```
+
+
+```{r}
+FeaturePlot(URL, features = "Pax6")
+FeaturePlot(URL, features = "Lhx9")
+
+DimPlot(URL, group.by = "branch")
+```
+
+
+```{r}
+# Initialize new metadata column in URL
+URL$branch <- as.character(URL$branch)
+
+URL$med_2p_branch_full <- URL$branch
+
+URL$med_2p_branch_full <- recode(
+  URL$branch,
+  "early"  = "Midbrain-fated Cells", 
+  "transition" = "RL",
+  "late" = "Granule Cells+UBCs"
+)
+# Remove "_n" only when it appears at the end of the name
+colnames(combined_alltp) <- sub("_1", "", colnames(combined_alltp))
+
+# Now recompute the shared cells, if appropriate:
+cells_shared <- intersect(colnames(URL), colnames(combined_alltp))
+
+cells_shared <- intersect(colnames(URL), colnames(combined_alltp))
+
+URL$med_2p_branch_full[cells_shared] <-
+  combined_alltp$med_2p_branch[cells_shared]
+
+
+```
+
+
+```{r}
+# Initialize new metadata column in URL
+URL$branch <- as.character(URL$branch)
+
+URL$coarse_populations <- URL$branch
+
+URL$coarse_populations <- recode(
+  URL$branch,
+  "early"  = "Midbrain-fated Cells", 
+  "transition" = "RL",
+  "late" = "Granule Cells+UBCs"
+)
+# Remove "_n" only when it appears at the end of the name
+colnames(combined_alltp) <- sub("_1", "", colnames(combined_alltp))
+
+# Now recompute the shared cells, if appropriate:
+cells_shared <- intersect(colnames(URL), colnames(combined_alltp))
+
+cells_shared <- intersect(colnames(URL), colnames(combined_alltp))
+
+URL$coarse_populations[cells_shared] <-
+  "Cerebellar Nuclei"
+
+
+```
+
+
+
+```{r}
+library(Seurat)
+library(dplyr)
+
+all_markers <- FindAllMarkers(
+  URL,
+  group.by = "branch",
+  only.pos = TRUE,        # keep only upregulated genes
+  min.pct = 0.25,         # expressed in ≥25% cells
+  logfc.threshold = 0.25  # minimum log fold change
+)
+
+head(all_markers)
+
+all_markers <- all_markers %>%
+  filter(p_val_adj < 0.05)
+
+top10 <- all_markers %>%
+  group_by(cluster) %>%
+  slice_max(n = 5, order_by = avg_log2FC)
+
+top10_ordered <- top10 %>%
+  arrange(cluster, desc(avg_log2FC))
+
+top_genes <- top10_ordered %>%
+  pull(gene) %>%
+  unique()
+
+URL$branch <- factor(URL$branch,levels = rev(c("late",
+                                "transition",
+                                "early"
+                                
+                              )))
+
+
+p <- DotPlot(
+  URL,
+  features = top_genes,
+  assay = "RNA",
+  group.by = 'branch',
+  cols = c('yellow', 'purple'),
+  dot.min = -0.6,
+  dot.scale = 10,
+  col.min = -1,
+  col.max = 2
+  #min.pct = 0.25
+) + 
+  scale_fill_gradient2(
+    low = "yellow",
+    mid = "yellow",
+    high = "purple",
+    midpoint = 0
+  ) +
+  RotatedAxis() +
+  theme(
+    axis.text.x = element_text(
+      angle = 90,   # vertical text
+      hjust = 1,
+      vjust = 0.5,
+      family = "Arial"
+    ),
+    axis.text.y = element_text(family = "Arial"),
+    text = element_text(family = "Arial")
+  )
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/allURL_dotplot_branch.svg",
+  plot = p,
+  width = 9,
+  height = 5,
+  device = svglite::svglite
+)
+```
+```{r}
+p
+```
+
+
+
+```{r}
+
+branch_pal <- c(
+  "Int/Lat Prog" = "#fca800",
+  "Med"          = "blue",
+  "IntA/Lat"     = "#fca800",
+  "IntA"     = "#fca800",
+  "Lat"     = "#fca800",
+  "RL"           = "lightblue",
+  #"IntP/IntA"  
+  "IntP"         = "#fca800",
+  #"Med_gly"      = "#17becf",
+  "Early Medial"        = "blue",
+  "Late Medial"         = "blue",
+  "Midbrain-fated Cells"  = "black",
+  "Granule Cells+UBCs" = "purple"
+)
+
+# Make sure the column is a factor
+URL$med_2p_branch_full <- factor(URL$med_2p_branch_full)
+# cells for the clusters you want in the back
+back_clusters <- c("Midbrain-fated Cells", "Granule Cells+UBCs")
+
+# order cells: back clusters first, then all others
+cell_order <- c(
+  rownames(URL@meta.data[URL$med_2p_branch_full %in% back_clusters, ]),
+  rownames(URL@meta.data[!(URL$med_2p_branch_full %in% back_clusters), ])
+)
+
+# store as new identity factor (optional)
+URL$med_2p_branch_full_ordered <- factor(
+  URL$med_2p_branch_full[cell_order],
+  levels = unique(URL$med_2p_branch_full[cell_order])
+)
+```
+
+```{r}
+URL$cell_type_coarse <- recode(URL$RNA_snn_res.1.5,
+    "0" = "Interposed/Lateral DCN", 
+    "1" = "Granule Cells+UBCs",
+    "2" = "Extracerebellar-fated", 
+    "3" = "RL",
+    "4" = "Granule Cells+UBCs", 
+    "5" = "RL",
+    "6" = "Granule Cells+UBCs", 
+    "7" = "Extracerebellar-fated",
+    "8" = "Extracerebellar-fated", 
+    "9" = "Extracerebellar-fated",
+    "10" = "Granule Cells+UBCs", 
+    "11" = "Granule Cells+UBCs",
+    "12" = "Extracerebellar-fated",
+    "13" = "Extracerebellar-fated", 
+    "14" = "RL",
+    "15" = "Granule Cells+UBCs", 
+    "16" = "Interposed/Lateral DCN",
+    "17" = "RL", 
+    "18" = "Medial DCN",
+    "19" = "Extracerebellar-fated",
+    "20" = "Interposed/Lateral DCN", 
+    "21" = "Medial DCN",
+    "22" = "Interposed/Lateral DCN", 
+    "23" = "Granule Cells+UBCs",
+    "24" = "Extracerebellar-fated", 
+    "25" = "Granule Cells+UBCs",
+    "26" = "Extracerebellar-fated", 
+    "27" = "Extracerebellar-fated"
+  
+  
+    # Add more as needed
+)
+colors = c("Medial DCN"="blue", "Granule Cells+UBCs"="purple", "Interposed/Lateral DCN"="orange", "Extracerebellar-fated"="black", "RL" = "lightblue")
+
+p <-DimPlot(URL, group.by = "cell_type_coarse",cols = colors, label = FALSE) + NoAxes()
+
+ggsave(
+  "excitatory_mouse_umaps/URLcell_type.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+```
+
+
+```{r}
+p
+```
+
+
+```{r}
+cell_order <- rev(c(
+  "Granule Cells+UBCs",
+  "Medial DCN",
+  "Interposed/Lateral DCN",
+  "Extracerebellar-fated",
+  "RL"
+))
+
+URL$cell_type_coarse <- factor(
+  URL$cell_type_coarse,
+  levels = cell_order
+)
+
+all_markers <- FindAllMarkers(
+  URL,
+  group.by = "cell_type_coarse",
+  only.pos = TRUE,
+  min.pct = 0.5,
+  logfc.threshold = 0.5
+)
+
+# 5. Get top 10 genes per cluster
+top10_markers <- all_markers %>%
+  group_by(cluster) %>%
+  slice_max(n = 5, order_by = avg_log2FC)
+
+# 6. View results
+head(top10_markers)
+
+p <- DotPlot(
+  URL,
+  features = top10_markers$gene,
+  assay = "RNA",
+  group.by = 'cell_type_coarse',
+  cols = c('yellow', 'purple'),
+  dot.min = -0.6,
+  dot.scale = 10,
+  col.min = -1,
+  col.max = 2
+  #min.pct = 0.25
+) + 
+  scale_fill_gradient2(
+    low = "yellow",
+    mid = "yellow",
+    high = "purple",
+    midpoint = 0
+  ) +
+  RotatedAxis() +
+  theme(
+    axis.text.x = element_text(
+      angle = 90,   # vertical text
+      hjust = 1,
+      vjust = 0.5,
+      family = "Arial"
+    ),
+    axis.text.y = element_text(family = "Arial"),
+    text = element_text(family = "Arial")
+  )
+
+p
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/excitatory_dotplot.svg",
+  plot = p,
+  width = 10,
+  height = 5,
+)
+```
+```{r}
+ggsave(
+  "excitatory_mouse_umaps/excitatory_dotplot.svg",
+  plot = p,
+  width = 10,
+  height = 5,
+)
+```
+
+
+```{r}
+library(dplyr)
+
+# Collector counts
+collector_counts <- table(URL$collector)
+
+URL$collector_counts <- paste0(
+  URL$collector,
+  " (",
+  collector_counts[URL$collector],
+  ")"
+)
+
+# Sample counts
+sample_counts <- table(URL$Sample)
+
+URL$sample_counts <- paste0(
+  URL$Sample,
+  " (",
+  sample_counts[URL$Sample],
+  ")"
+)
+
+p <- DimPlot(URL, group.by  = "sample_counts")
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/tables/mouse_exc_sample_counts.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+p <- DimPlot(URL, group.by  = "collector_counts")
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/tables/mouse_exc_collector_counts.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+```
+
+
+
+
+
+```{r}
+p <- DimPlot(
+  URL,
+  group.by = "branch",
+  cols = c(
+    "transition" = "lightblue",  # swapped
+    "early" = "maroon",
+    "late" = "darkgreen"         # swapped
+  )
+)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/allURL_branch.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+
+```
+
+
+```{r}
+p <- DimPlot(
+  URL,
+  group.by = "TimePoint",
+)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/allURL_timepoint.svg",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+
+```
+
+```{r}
+p <- FeaturePlot(URL, features = "Pax6", max.cutoff = 2)
+
+ggsave("C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/allURL_Pax6.png",
+  plot = p,
+  width = 7,
+  height = 5)
+
+p <- FeaturePlot(URL, features = "Lhx9", max.cutoff = 2)
+
+ggsave("C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/allURL_Lhx9.png",
+  plot = p,
+  width = 7,
+  height = 5)
+
+```
+
+```{r}
+p <- DimPlot(
+  URL,
+  group.by = "DCN_status",
+  cols = c(
+    "DCN" = "blue",
+    "Other" = "grey",
+    "RL" = "lightblue"
+  )
+)
+
+ggsave("C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/allURL_dcn_status.png",
+  plot = p,
+  width = 7,
+  height = 5)
+
+```
+
+
+
+```{r}
+p <- FeaturePlot(URL, features = "Lmx1a", max.cutoff = 2)
+
+ggsave("C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/allURL_Lmx1a.png",
+  plot = p,
+  width = 7,
+  height = 5)
+
+p <- FeaturePlot(URL, features = "Meis2", max.cutoff = 2)
+
+ggsave("C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/allURL_Meis2.png",
+  plot = p,
+  width = 7,
+  height = 5)
+
+p <- FeaturePlot(URL, features = "Zfhx3", max.cutoff = 2)
+
+ggsave("C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/allURL_Zfhx3.png",
+  plot = p,
+  width = 7,
+  height = 5)
+
+p <- FeaturePlot(URL, features = "Reln", max.cutoff = 2)
+
+ggsave("C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/allURL_Reln.png",
+  plot = p,
+  width = 7,
+  height = 5)
+
+```
+
+```{r}
+
+```{r}
+combined_alltp$med_2p_branch_coarse <- recode(
+  combined_alltp$SCT_snn_res.2,
+  
+  "0"  = "Int/Lat Prog", 
+  "1"  = "Med",
+  "2"  = "Med", 
+  "3"  = "IntA",
+  "4"  = "RL", 
+  "5"  = "IntA/Lat",
+  "6"  = "Med", 
+  "7"  = "IntA/Lat",
+  "8"  = "RL", 
+  "9"  = "Int/Lat Prog",
+  "10" = "IntP", 
+  "11" = "IntA",
+  "12" = "Lat",
+  "13" = "IntP", 
+  "14" = "Med",
+  "15" = "Med",
+  "16" = "IntP", 
+  "17" = "Med",
+  "18" = "IntP",
+  "19"  = "Med",
+  "20" = "IntA/Lat", 
+  "21" = "Med",
+  "22" = "Lat",
+  "23" = "IntP", 
+  "24" = "IntP",
+  "25" = "IntP",
+  "26" = "Med"
+)
+
+branch_pal <- c(
+  "Int/Lat Prog" = "yellow",
+  "Med"          = "#08519c",
+  "IntA/Lat"     = "#fca800",
+  "IntA"     = "#f7a2f9",
+  "Lat"     = "#cf3731",
+  "RL"           = "lightblue",
+  #"IntP/IntA"  
+  "IntP"         = "#78b958",
+  #"Med_gly"      = "#17becf",
+  "Early Medial"        = "#824819",
+  "Late Medial"         = "blue",
+  "Midbrain-fated Cells"  = "black",
+  "Granule Cells+UBCs" = "purple"
+)
+
+# Start with existing annotation
+combined_alltp$med_2p_branch <- combined_alltp$med_2p_branch
+
+# Replace with subareas where available
+combined_alltp$med_2p_branch[!is.na(combined_alltp$subareas)] <-
+  combined_alltp$subareas[!is.na(combined_alltp$subareas)]
+
+# Collapse medial subtypes
+combined_alltp$med_2p_branch[combined_alltp$subareas == "MedL"] <-
+  "Early Medial"
+
+combined_alltp$med_2p_branch[combined_alltp$subareas == "Med"] <-
+  "Late Medial"
+
+# Override MedDL cells
+combined_alltp$med_2p_branch[combined_alltp$final.clusters2 == "MedDL"] <-
+  "Late Medial"
+
+# Start with the coarse annotation
+combined_alltp$med_2p_branch_new <- as.character(combined_alltp$med_2p_branch_coarse)
+
+# Rename Med -> Late Medial
+combined_alltp$med_2p_branch_new[
+  combined_alltp$med_2p_branch_coarse == "Med"
+] <- "Late Medial"
+
+# Replace with Early Medial where appropriate
+combined_alltp$med_2p_branch_new[
+  combined_alltp$med_2p_branch == "Early Medial"
+] <- "Early Medial"
+
+combined_alltp$med_2p_branch_new[combined_alltp$subareas == "MedL"] <-
+  "Early Medial"
+
+
+# Check the result
+#table(combined_alltp$med_2p_branch_new)
+#table(combined_alltp$med_2p_branch, combined_alltp$med_2p_branch_new)
+
+p <- DimPlot(
+  combined_alltp,
+  group.by = "med_2p_branch_coarse",
+  cols = branch_pal,
+  label = FALSE,
+  repel = TRUE
+)
+
+p
+
+
+
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/CNcell_type_nomed_split.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+p <- DimPlot(
+  combined_alltp,
+  group.by = "TimePoint",
+  #cols = branch_pal,
+  label = FALSE,
+  repel = TRUE
+)
+
+
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/CNtimepoint.svg",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+```
+```{r}
+DimPlot(
+  combined_alltp,
+  group.by = "med_2p_branch_new",
+  cols = branch_pal,
+  label = FALSE,
+  repel = TRUE
+)
+```
+
+```
+
+

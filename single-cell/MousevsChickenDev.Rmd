@@ -1,0 +1,4724 @@
+---
+title: "snRNAseq data - mine"
+output: html_document
+date: "2025-05-06"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+```{r cars}
+library(Seurat) 
+#library(SeuratDisk)
+#library(SeuratData)
+library(ggplot2)
+library(patchwork)
+library(dplyr)
+#library(sceasy)
+library(reticulate)
+#library(rliger)
+library(magrittr) # needs to be run every time you start R and want to use %>%
+library(dplyr) 
+library(Seurat)
+library(tidyverse)
+#library(SeuratWrappers)
+library(harmony)
+library(batchelor)
+library(usethis)
+library(SeuratWrappers)
+```
+
+
+
+```{r}
+chicken_data_me <- readRDS("C:/Users/kebsc/OneDrive/Documents/chicken_e6-7.rds")
+chicken_data_me$collector <- 'me_2'
+data_li <- readRDS("C:/Users/kebsc/Downloads/seurat_new (1).rds")
+data_li$collector <- 'li'
+
+mouse_data <- readRDS("C:/Users/kebsc/Downloads/combined_alltp2-2025.rds")
+mouse_data$collector <- 'me_1'
+```
+
+```{r}
+library(Seurat)
+library(ggplot2)
+library(patchwork)
+seu<- chicken_data_me
+# Calculate mitochondrial percentage
+
+seu$qc <- "qc"
+# Violin plots
+p1 <- VlnPlot(
+  seu,
+  group.by = "qc",
+  features = "nCount_RNA",
+  pt.size = 0.1
+) +
+  ggtitle("UMIs per cell") +
+  theme_classic()
+
+p2 <- VlnPlot(
+  seu,
+   group.by = "qc",
+  features = "nFeature_RNA",
+  pt.size = 0.1
+) +
+  ggtitle("Genes per cell") +
+  theme_classic()
+
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/chicken umaps/chicken_umispercell.svg",
+  plot = p1,
+  width = 7,
+  height = 5,
+)
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/chicken umaps/chicken_genespercell.svg",
+  plot = p2,
+  width = 7,
+  height = 5,
+)
+
+
+
+```
+
+
+
+```{r}
+DimPlot(data_li)
+FeaturePlot(data_li, features = "CRABP1")
+FeaturePlot(data_li, features = "EN1")
+
+```
+```{r}
+combined_alltp = readRDS("C:/Users/kebsc/Downloads/combined_alltp2-2025.rds")
+combined_alltp_e13 = subset(combined_alltp, TimePoint == "E13.5")
+```
+
+
+
+```{r}
+FeaturePlot(mouse_data, features = "Maf", max.cutoff = 3)
+FeaturePlot(mouse_data, features = "Ccnd2", max.cutoff = 3)
+mouse_data <- combined_alltp
+```
+
+
+```{r}
+chicken_data <- merge(chicken_data_me, y = data_li)
+chicken_data <- JoinLayers(chicken_data)
+# Identify genes starting with "ENSGALGAL"
+genes_to_remove <- grep("^ENSGALG", rownames(chicken_data), value = TRUE)
+
+# Filter them out of the object
+chicken_data <- subset(chicken_data, features = setdiff(rownames(chicken_data), genes_to_remove))
+
+```
+
+```{r}
+options(future.globals.maxSize=10000*1024^2)
+```
+
+```{r}
+library(Seurat)
+library(SeuratObject)
+library(SeuratDisk)
+
+# Step 1. Split Seurat object by metadata feature
+# Replace "collector" with your metadata column name
+chicken_list <- SplitObject(chicken_data, split.by = "collector")
+
+# Step 2. Normalize, find variable features, and run PCA for each dataset
+chicken_list <- lapply(chicken_list, function(x) {
+  x <- NormalizeData(x, assay = "RNA")
+  x <- FindVariableFeatures(x, assay = "RNA")
+  x <- ScaleData(x, assay = "RNA")
+  x <- RunPCA(x, assay = "RNA")
+  return(x)
+})
+
+# Step 3. Select integration features
+features <- SelectIntegrationFeatures(object.list = chicken_list, nfeatures = 500)
+
+# Step 4. Find integration anchors using RPCA
+# The reduction = "rpca" argument triggers RPCA-based integration
+chicken_anchors <- FindIntegrationAnchors(
+  object.list = chicken_list,
+  anchor.features = features,
+  reduction = "rpca"
+)
+
+# Step 5. Integrate the datasets
+chicken_integrated <- IntegrateData(anchorset = chicken_anchors)
+```
+
+
+```{r}
+# Step 6. Downstream analysis
+DefaultAssay(chicken_integrated) <- "integrated"
+chicken_integrated <- ScaleData(chicken_integrated)
+chicken_integrated <- RunPCA(chicken_integrated)
+chicken_integrated <- FindNeighbors(chicken_integrated)
+```
+
+
+```{r}
+chicken_integrated <- RunUMAP(chicken_integrated, dims = 1:30)
+
+# Step 7. (Optional) Clustering
+chicken_integrated <- FindNeighbors(chicken_integrated, dims = 1:30)
+chicken_integrated <- FindClusters(chicken_integrated, resolution = 0.5)
+```
+
+
+
+
+
+```{r}
+FeaturePlot(chicken_integrated, reduction = "umap", features = "Atoh1", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(chicken_integrated, reduction = "umap", features = "CRABP2", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(chicken_integrated, reduction = "umap", features = "EN1", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(chicken_integrated, reduction = "umap", features = "CATH1", min.cutoff = 0, max.cutoff = 4)
+
+```
+
+
+```{r}
+FeaturePlot(chicken_integrated, reduction = "umap", features = "LHX9", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(chicken_integrated, reduction = "umap", features = "POU3F2", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(chicken_integrated, reduction = "umap", features = "IRX3", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(chicken_integrated, reduction = "umap", features = "MAF", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(chicken_integrated, reduction = "umap", features = "NTNG1", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(chicken_integrated, reduction = "umap", features = "ROBO3", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(chicken_integrated, reduction = "umap", features = "RELN", min.cutoff = 0, max.cutoff = 4)
+DimPlot(chicken_integrated, reduction = "umap", group.by = "ident", label = TRUE)
+
+```
+```{r}
+FeaturePlot(chicken_integrated, reduction = "umap", features = "CDH5", min.cutoff = 0, max.cutoff = 4)
+
+```
+
+```{r}
+chicken_integrated_actual = subset(chicken_integrated, idents = c(17,2,1,8,11,3,4,13,6,5,16,14,23))
+```
+
+```{r}
+FeaturePlot(chicken_integrated_actual, features = "nCount_RNA", max.cutoff = 30000, min.cutoff = 10000)
+```
+
+
+```{r}
+library(Seurat)
+library(SeuratObject)
+library(SeuratDisk)
+
+# Step 1. Split Seurat object by metadata feature
+# Replace "collector" with your metadata column name
+chicken_list <- SplitObject(chicken_integrated_actual, split.by = "collector")
+
+# Step 2. Normalize, find variable features, and run PCA for each dataset
+chicken_list <- lapply(chicken_list, function(x) {
+  x <- NormalizeData(x, assay = "RNA")
+  x <- FindVariableFeatures(x, assay = "RNA")
+  x <- ScaleData(x, assay = "RNA")
+  x <- RunPCA(x, assay = "RNA")
+  return(x)
+})
+
+# Step 3. Select integration features
+features <- SelectIntegrationFeatures(object.list = chicken_list, nfeatures = 500)
+
+# Step 4. Find integration anchors using RPCA
+# The reduction = "rpca" argument triggers RPCA-based integration
+chicken_anchors <- FindIntegrationAnchors(
+  object.list = chicken_list,
+  anchor.features = features,
+  reduction = "rpca"
+)
+
+# Step 5. Integrate the datasets
+chicken_integrated_actual <- IntegrateData(anchorset = chicken_anchors)
+```
+
+
+```{r}
+# Step 6. Downstream analysis
+DefaultAssay(chicken_integrated_actual) <- "integrated"
+chicken_integrated_actual <- ScaleData(chicken_integrated_actual)
+chicken_integrated_actual <- RunPCA(chicken_integrated_actual)
+chicken_integrated_actual <- RunUMAP(chicken_integrated_actual, dims = 1:20, return.model = TRUE)
+
+# Step 7. (Optional) Clustering
+chicken_integrated_actual <- FindNeighbors(chicken_integrated_actual, dims = 1:20)
+```
+
+
+```{r}
+chicken_integrated_actual <- FindClusters(chicken_integrated_actual, resolution = 0.7)
+chicken_integrated_actual$xy <- Idents(chicken_integrated_actual)
+#chicken_integrated_actual <- subset(
+#  chicken_integrated_actual,
+#  xy != 6
+#)
+```
+
+
+```{r}
+DimPlot(chicken_integrated_actual, reduction = "umap", group.by = "collector", shuffle = TRUE)
+DimPlot(chicken_integrated_actual, reduction = "umap", group.by = "cellType", shuffle = TRUE)
+DimPlot(chicken_integrated_actual, reduction = "umap", group.by = "ident", label = TRUE)
+FeaturePlot(chicken_integrated_actual, reduction = "umap", features = "SOX14", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(chicken_integrated_actual, reduction = "umap", features = "SLC17A6", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(chicken_integrated_actual, reduction = "umap", features = "MEIS2", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(chicken_integrated_actual, reduction = "umap", features = "LHX9", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(chicken_integrated_actual, reduction = "umap", features = "POU3F2", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(chicken_integrated_actual, reduction = "umap", features = "IRX3", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(chicken_integrated_actual, reduction = "umap", features = "MAF", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(chicken_integrated_actual, reduction = "umap", features = "NTNG1", min.cutoff = 0, max.cutoff = 4)
+```
+```{r}
+chicken_integrated_actual <- RenameIdents(
+  chicken_integrated_actual,
+  "6" = "Purkinje Cells",
+  "7" = "Purkinje Cells",
+  "1" = "Purkinje Cells",
+  "17" = "Purkinje Cells",
+  "11" = "Purkinje Cells",
+  "10" = "i1 neurons",
+  "13" = "Interneurons",
+  "15" = "i1+PC Prog",
+  '9' = "Inhib Prog",
+  '2' = 'Progenitors',
+  '4' = 'Progenitors',
+  '12' = 'Progenitors',
+  '0' = 'Granule Cells',
+  '8' = 'Med CN+UBCs',
+  '20' = "Lat CN",
+  '3' = "Midbrain-fated Cells"
+)
+```
+
+```{r}
+DimPlot(chicken_integrated_actual, group.by = "ident")
+```
+
+
+```{r}
+chicken_integrated_actual$xy <- Idents(chicken_integrated_actual)
+chicken_integrated_actual <- subset(
+  chicken_integrated_actual,
+  subset = !(xy %in% c( 5, 14, 16, 18, 19, 21, 22))
+)
+```
+
+```{r}
+DimPlot(chicken_integrated_actual, reduction = "umap", group.by = "ident")
+umap <- Embeddings(chicken_integrated_actual, "umap")
+
+chicken_integrated_actual[["umap_rot"]] <- CreateDimReducObject(
+  embeddings = -umap,
+  key = "UMAPR_",
+  assay = DefaultAssay(chicken_integrated_actual)
+)
+chicken_integrated_actual[["umap"]] <- chicken_integrated_actual[["umap_rot"]]
+
+DimPlot(
+  chicken_integrated_actual,
+  group.by = "ident"
+)
+```
+```{r}
+p <- DimPlot(
+  chicken_integrated_actual,
+  group.by = "ident",
+  shuffle = TRUE,
+  #label = TRUE,
+  #repel = TRUE
+)
+
+# Best for publications
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/chicken_celltype.pdf",
+  plot = p,
+  width = 8,
+  height = 7,
+  device = cairo_pdf
+)
+
+p <- DimPlot(
+  chicken_integrated_actual,
+  group.by = "collector",
+  shuffle = TRUE,
+  #label = TRUE,
+  #repel = TRUE
+)
+
+# Best for publications
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/chicken_collector.pdf",
+  plot = p,
+  width = 8,
+  height = 7,
+  device = cairo_pdf
+)
+
+p <- FeaturePlot(
+  chicken_integrated_actual,
+  features = "SLC17A6",
+  max.cutoff = 2
+  #label = TRUE,
+  #repel = TRUE
+)
+
+# Best for publications
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/chicken_slc17a6.pdf",
+  plot = p,
+  width = 8,
+  height = 7,
+  device = cairo_pdf
+)
+
+p <- FeaturePlot(
+  chicken_integrated_actual,
+  features = "GAD1",
+  max.cutoff = 2
+  #label = TRUE,
+  #repel = TRUE
+)
+
+# Best for publications
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/chicken_gad1.pdf",
+  plot = p,
+  width = 8,
+  height = 7,
+  device = cairo_pdf
+)
+
+p <- FeaturePlot(
+  chicken_integrated_actual,
+  features = "MEIS2",
+  max.cutoff = 5
+  #label = TRUE,
+  #repel = TRUE
+)
+
+# Best for publications
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/chicken_meis2.pdf",
+  plot = p,
+  width = 8,
+  height = 7,
+  device = cairo_pdf
+)
+
+p <- FeaturePlot(
+  chicken_integrated_actual,
+  features = "ZFHX3",
+  max.cutoff = 2
+  #label = TRUE,
+  #repel = TRUE
+)
+
+# Best for publications
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/chicken_zfhx3.pdf",
+  plot = p,
+  width = 8,
+  height = 7,
+  device = cairo_pdf
+)
+
+```
+
+```{r}
+# Find markers for each ident/cluster
+markers <- FindAllMarkers(
+  chicken_integrated_actual,
+  only.pos = TRUE,
+  min.pct = 0.25,
+  logfc.threshold = 0.25
+)
+
+# Select top DE genes per cluster
+library(dplyr)
+
+top_genes <- markers %>%
+  group_by(cluster) %>%
+  slice_max(order_by = avg_log2FC, n = 5) %>%
+  ungroup()
+
+genes_use <- unique(top_genes$gene)
+```
+
+
+```{r}
+
+p <- DotPlot(
+  chicken_integrated_actual,
+  features = genes_use,
+  assay = "RNA",
+  cols = c('yellow', 'purple'),
+  dot.min = 0,
+  col.min = -1,
+  col.max = 2
+) + 
+  scale_fill_gradient2(
+    low = "yellow",
+    mid = "yellow",
+    high = "purple",
+    midpoint = 0
+  ) +
+  RotatedAxis() +
+  theme(
+    axis.text.x = element_text(
+      angle = 90,   # vertical text
+      hjust = 1,
+      vjust = 0.5,
+      family = "Arial"
+    ),
+    axis.text.y = element_text(family = "Arial"),
+    text = element_text(family = "Arial")
+  )
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/chicken_dotplot.svg",
+  plot = p,
+  width = 15,
+  height = 5,
+  device = svglite::svglite
+)
+
+```
+
+
+
+```{r}
+FeaturePlot(chicken_integrated_actual, reduction = "umap", features = "PAX2", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(chicken_integrated_actual, reduction = "umap", features = "FGF8", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(chicken_integrated_actual, reduction = "umap", features = "MEIS2", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(chicken_integrated_actual, reduction = "umap", features = "LHX9", min.cutoff = 0, max.cutoff = 4)
+
+```
+
+```{r}
+# 1. Subset query cells (by metadata column)
+query <- subset(
+  chicken_integrated_actual,
+  subset = collector == "me_2"
+)
+
+# Drop problematic slots from RNA assay
+# Inspect layers
+Layers(query[["RNA"]])
+
+query <- DietSeurat(
+  query,
+  assays = "integrated",
+  layers = c("counts", "data")
+)
+
+
+
+# 3. Find transfer anchors
+anchors <- FindTransferAnchors(
+  reference = chicken_integrated_actual,
+  query = query,
+  dims = 1:30,
+  reference.reduction = "pca"
+)
+
+# 4. Transfer labels
+predictions <- TransferData(
+  anchorset = anchors,
+  refdata = chicken_integrated_actual$cellType,
+  dims = 1:30
+)
+
+# 5. Add predictions to QUERY object (IMPORTANT)
+query <- AddMetaData(
+  object = query,
+  metadata = predictions
+)
+
+```
+
+```{r}
+chicken_integrated_actual <- RunUMAP(chicken_integrated_actual, dims = 1:20, return.model = TRUE)
+
+# 1. Subset query cells (by metadata column)
+query <- subset(
+  chicken_integrated_actual,
+  subset = collector == "me_2"
+)
+# 3. Find transfer anchors
+anchors <- FindTransferAnchors(
+  reference = chicken_integrated_actual,
+  query = query,
+  dims = 1:20,
+  reference.reduction = "pca"
+)
+
+query <- MapQuery(
+  anchorset = anchors,
+  query = query,
+  reference = chicken_integrated_actual,
+  refdata = list(cellType = "cellType"),
+  reference.reduction = "pca",
+  reduction.model = "umap"
+)
+```
+
+
+```{r}
+#query <- FindClusters(query, resolution = 1)
+
+DimPlot(query,reduction = "ref.umap", group.by = "predicted.cellType", label = TRUE)
+DimPlot(query,reduction = "umap", group.by = "collector", label = TRUE)
+
+DimPlot(query,reduction = "ref.umap", group.by = "ident", label = TRUE)
+FeaturePlot(query, reduction = "umap", features = "CDH8", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(query, reduction = "umap", features = "SLC17A6", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(query, reduction = "umap", features = "MEIS2", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(query, reduction = "umap", features = "LHX9", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(query, reduction = "umap", features = "POU3F2", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(query, reduction = "umap", features = "IRX3", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(query, reduction = "umap", features = "MAF", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(query, reduction = "umap", features = "NTNG1", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(query, reduction = "umap", features = "ROBO3", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(query, reduction = "umap", features = "RELN", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(query, reduction = "umap", features = "THY1", min.cutoff = 0, max.cutoff = 4)
+
+```
+```{r}
+chicken_integrated_actual <- FindNeighbors(chicken_integrated_actual)
+
+chicken_integrated_actual <- FindClusters(chicken_integrated_actual, resolution = 3)
+```
+
+
+```{r}
+DimPlot(chicken_integrated_actual, reduction = "umap", group.by = "ident", label = TRUE)
+
+FeaturePlot(chicken_integrated_actual, reduction = "umap", features = "GAD1", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(chicken_integrated_actual, reduction = "umap", features = "SLC17A6", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(chicken_integrated_actual, reduction = "umap", features = "MEIS2", min.cutoff = 1, max.cutoff = 4)
+FeaturePlot(chicken_integrated_actual, reduction = "umap", features = "LMX1A", min.cutoff = 0, max.cutoff = 4)
+#FeaturePlot(chicken_integrated_actual, reduction = "umap", features = "POU3F2", min.cutoff = 0, max.cutoff = 4)
+#FeaturePlot(chicken_integrated_actual, reduction = "umap", features = "IRX3", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(chicken_integrated_actual, reduction = "umap", features = "MAF", min.cutoff = 0, max.cutoff = 4)
+#FeaturePlot(chicken_integrated_actual, reduction = "umap", features = "NTNG1", min.cutoff = 0, max.cutoff = 4)
+#FeaturePlot(chicken_integrated_actual, reduction = "umap", features = "ROBO3", min.cutoff = 0, max.cutoff = 4)
+#FeaturePlot(chicken_integrated_actual, reduction = "umap", features = "LMX1A", min.cutoff = 0, max.cutoff = 4)
+FeaturePlot(chicken_integrated_actual, reduction = "umap", features = "ZFHX3", min.cutoff = 0, max.cutoff = 4)
+
+
+
+FeaturePlot(chicken_integrated_actual, reduction = "umap", features = "RELN", min.cutoff = 1, max.cutoff = 4)
+```
+```{r}
+query_inhib <- subset(chicken_integrated_actual, idents = c("12", '16', '5', '21', '19', '10', '11', '23', '14', '29', '13', '28', '34', '6', '1', '37', '2', '35'))
+query_inhib = subset(query_inhib, SLC17A6 == 0, assay = "RNA")
+```
+
+```{r}
+chicken_integrated_inhib <- ScaleData(query_inhib)
+chicken_integrated_inhib <- RunPCA(chicken_integrated_inhib)
+chicken_integrated_inhib <- RunUMAP(chicken_integrated_inhib, dims = 1:10)
+
+# Step 7. (Optional) Clustering
+chicken_integrated_inhib <- FindNeighbors(chicken_integrated_inhib, dims = 1:30)
+chicken_integrated_inhib <- FindClusters(chicken_integrated_inhib, resolution = 0.5)
+```
+```{r}
+DimPlot(chicken_integrated_inhib, group.by = "seurat_clusters", label = TRUE)
+chicken_integrated_inhib <- subset(chicken_integrated_inhib, seurat_clusters != 6)
+chicken_integrated_inhib <- subset(chicken_integrated_inhib, seurat_clusters != 12)
+
+```
+
+
+```{r}
+#DimPlot(chicken_integrated_inhib, group.by = "ident", label = TRUE)
+chicken_integrated_inhib$sample[
+  is.na(chicken_integrated_inhib$sample)
+] <- "Cb_E6/7"
+
+chicken_integrated_inhib$collector[
+  chicken_integrated_inhib$collector == "me_2"
+] <- "Anant"
+
+chicken_integrated_inhib$collector[
+  chicken_integrated_inhib$collector == "li"
+] <- "Khouri-Farah"
+
+p <- DimPlot(chicken_integrated_inhib, group.by = "collector")
+p
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/inhib_chicken_umaps/inhib_collector.png",
+  plot = p,
+  width = 7,
+  height = 5)
+
+p <- DimPlot(chicken_integrated_inhib, group.by = "sample")
+p
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/inhib_chicken_umaps/inhib_sample.png",
+  plot = p,
+  width = 7,
+  height = 5)
+
+
+p <- DimPlot(chicken_integrated_inhib, group.by = "sample")
+p
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/inhib_chicken_umaps/inhib_sample.svg",
+  plot = p,
+  width = 7,
+  height = 5)
+
+```
+
+
+
+```{r}
+chicken_integrated_inhib <- RenameIdents(
+  chicken_integrated_inhib,
+  `0` = "Purkinje Cells",
+  `1` = "PC+i1 Prog",
+  `2` = "Purkinje Cells",
+  `3` = "Purkinje Cells",
+  `4` = "Purkinje Cells",
+  `5` = "Interneurons",
+  #`6` = "Purkinje Cells",
+  `7` = "Purkinje Cells",
+  `8` = "Purkinje Cells",
+  `9` = "Purkinje Cells",
+  `10` = "i1 DCN",
+  `11` = "Purkinje Cells",
+  #`12` = "PC+i1 Prog"
+)
+```
+
+
+```{r}
+cluster_cols <- c(
+  "Purkinje Cells"    = "#B22",
+  "Interneurons"       = "#4F7942",
+  "VZ" = "lightblue",
+  "PC+i1 Prog" = "#BDA55D",
+  "i2 DCN"         = "#984EA3",
+  "i1 DCN"         = "#F5A33E",
+  "Interneurons"        = "#FF8DA1"
+)
+p<- DimPlot(chicken_integrated_inhib, cols = cluster_cols, group.by = "ident")
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/chicken_cell_type_inhib.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+p<- DimPlot(chicken_integrated_inhib, cols = cluster_cols, group.by = "ident")
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/chicken_cell_type_inhib.svg",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+```
+```{r}
+FeaturePlot(chicken_integrated_inhib, features = "SLC17A6")
+```
+
+
+```{r}
+p<- DimPlot(chicken_integrated_inhib,  group.by = "collector")
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/chicken_collector_inhib.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+```
+
+```{r}
+
+cell_order <- rev(c(
+  "PC+i1 Prog",
+  "Purkinje Cells",
+  "i1 DCN",
+  "Interneurons"
+))
+
+Idents(chicken_integrated_inhib) <- factor(
+  Idents(chicken_integrated_inhib),
+  levels = cell_order
+)
+
+all_markers <- FindAllMarkers(
+  chicken_integrated_inhib,
+  group.by = "ident",
+  only.pos = TRUE,
+  min.pct = 0.75,
+  logfc.threshold = 0.25
+)
+
+# 5. Get top 10 genes per cluster
+top10_markers <- all_markers %>%
+  group_by(cluster) %>%
+  slice_max(n = 6, order_by = avg_log2FC)
+
+# 6. View results
+head(top10_markers)
+
+
+p <- DotPlot(
+  chicken_integrated_inhib,
+  features = top10_markers$gene,
+  assay = "RNA",
+  cols = c("yellow", "purple"),
+  dot.scale = 10,
+  scale.by = "radius",
+  col.min = 0,
+  col.max = 1
+) +
+  scale_fill_gradient2(
+    low = "yellow",
+    mid = "yellow",
+    high = "purple",
+    midpoint = 0
+  ) +
+  RotatedAxis() +
+  theme(
+    axis.text.x = element_text(
+      angle = 90,
+      hjust = 1,
+      vjust = 0.5,
+      family = "Arial"
+    ),
+    axis.text.y = element_text(family = "Arial"),
+    text = element_text(family = "Arial")
+  )
+
+p
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/chicken_inhib_dotplot.svg",
+  plot = p,
+  width = 10,
+  height = 5,
+)
+```
+
+
+
+
+```{r}
+chicken_integrated_inhib$timepoint <- ifelse(
+  chicken_integrated_inhib$collector == "me_2",
+  "E6/7",
+  sub(".*_", "", chicken_integrated_inhib$sample)
+)
+chicken_integrated_inhib
+p <- DimPlot(
+  chicken_integrated_inhib,
+  group.by = "timepoint",
+ 
+  pt.size = 1
+)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/chicken_timepoint_inhib.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+p <- DimPlot(
+  chicken_integrated_inhib,
+  group.by = "timepoint",
+ 
+  pt.size = 1
+)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/chicken_timepoint_inhib.svg",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+```
+```{r}
+p <- DimPlot(
+  chicken_integrated_inhib,
+  group.by = "collector",
+ shuffle = TRUE,
+  pt.size = 1
+)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/chicken_collector_inhib.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+p <- DimPlot(
+  chicken_integrated_inhib,
+  group.by = "collector",
+ 
+  pt.size = 1
+)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/chicken_collector_inhib.svg",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+```
+
+
+```{r}
+library(dplyr)
+
+# Collector counts
+collector_counts <- table(chicken_integrated_inhib$collector)
+
+chicken_integrated_inhib$collector_counts <- paste0(
+  chicken_integrated_inhib$collector,
+  " (",
+  collector_counts[chicken_integrated_inhib$collector],
+  ")"
+)
+
+# Sample counts
+sample_counts <- table(chicken_integrated_inhib$sample)
+
+chicken_integrated_inhib$sample_counts <- paste0(
+  chicken_integrated_inhib$sample,
+  " (",
+  sample_counts[chicken_integrated_inhib$sample],
+  ")"
+)
+
+p <- DimPlot(chicken_integrated_inhib, group.by  = "sample_counts")
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/tables/chicken_inhib_sample_counts.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+p <- DimPlot(chicken_integrated_inhib, group.by  = "collector_counts")
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/tables/chicken_inhib_collector_counts.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+```
+
+
+
+```{r}
+p <- FeaturePlot(
+  chicken_integrated_inhib,
+  features = "PAX2",
+  max.cutoff = 4,
+  min.cutoff= 0,
+  pt.size = 1
+)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/chicken_PAX2.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+```
+
+
+
+```{r}
+query_dcn <- subset(chicken_integrated_actual, ident = c("17", '32', '25', '0', '18', '7', '22', '24'))
+
+
+```
+
+
+```{r}
+chicken_integrated_dcn_granule <- ScaleData(query_dcn)
+chicken_integrated_dcn_granule <- RunPCA(chicken_integrated_dcn_granule)
+chicken_integrated_dcn_granule <- RunUMAP(chicken_integrated_dcn_granule, dims = 1:30)
+# Step 7. (Optional) Clustering
+chicken_integrated_dcn_granule <- FindNeighbors(chicken_integrated_dcn_granule, dims = 1:30)
+```
+
+
+```{r}
+chicken_integrated_dcn_granule <- FindClusters(chicken_integrated_dcn_granule, resolution = 0.3)
+
+DimPlot(chicken_integrated_dcn_granule, group.by = "ident", label = TRUE)
+DimPlot(chicken_integrated_dcn_granule, group.by = "collector")
+```
+
+```{r}
+FeaturePlot(chicken_integrated_dcn_granule, features = "LMX1A")
+FeaturePlot(chicken_integrated_dcn_granule, features = "NR2F2")
+FeaturePlot(chicken_integrated_dcn_granule, features = "MEIS2")
+FeaturePlot(chicken_integrated_dcn_granule, features = "ZFHX3")
+
+
+```
+
+
+```{r}
+#DimPlot(chicken_integrated_inhib, group.by = "ident", label = TRUE)
+chicken_integrated_dcn_granule$sample[
+  is.na(chicken_integrated_dcn_granule$sample)
+] <- "Cb_E6/7"
+
+chicken_integrated_dcn_granule$collector[
+  chicken_integrated_dcn_granule$collector == "me_2"
+] <- "Anant"
+
+chicken_integrated_dcn_granule$collector[
+  chicken_integrated_dcn_granule$collector == "li"
+] <- "Khouri-Farah"
+
+p <- DimPlot(chicken_integrated_dcn_granule, group.by = "collector")
+p
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/inhib_chicken_umaps/exc_collector.png",
+  plot = p,
+  width = 7,
+  height = 5)
+
+p <- DimPlot(chicken_integrated_dcn_granule, group.by = "sample")
+p
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/inhib_chicken_umaps/exc_sample.png",
+  plot = p,
+  width = 7,
+  height = 5)
+```
+
+```{r}
+ DimPlot(chicken_integrated_dcn_granule)
+```
+
+```{r}
+chicken_integrated_dcn_granule <- RenameIdents(
+  chicken_integrated_dcn_granule,
+  `1` = "Granule Cells+UBCs",
+  `2` = "Granule Cells+UBCs",
+  `0` = "Medial DCN",
+  `3` = "Extracerebellar-fated Cells",
+  `4` = "Lateral DCN",
+  `5` = "Extracerebellar-fated Cells",
+  `6` = "Extracerebellar-fated Cells"
+)
+```
+
+
+```{r}
+colors = c("Medial DCN"="blue", "Granule Cells+UBCs"="purple", "Lateral DCN"="orange", "Extracerebellar-fated Cells"="black")
+
+p<- DimPlot(chicken_integrated_dcn_granule, cols = colors, group.by = "ident")
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/chicken_cell_type_exc.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+p<- DimPlot(chicken_integrated_dcn_granule, cols = colors, group.by = "ident")
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/chicken_cell_type_exc.svg",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+```
+
+
+#####MANJARI
+```{r}
+cell_order <- rev(c(
+  "Granule Cells+UBCs",
+  "Medial DCN",
+  "Lateral DCN",
+  "Extracerebellar-fated Cells"
+))
+
+Idents(chicken_integrated_dcn_granule) <- factor(
+  Idents(chicken_integrated_dcn_granule),
+  levels = cell_order
+)
+
+all_markers <- FindAllMarkers(
+  chicken_integrated_dcn_granule,
+  group.by = "ident",
+  only.pos = TRUE,
+  min.pct = 0.75,
+  logfc.threshold = 0.25
+)
+
+# 5. Get top 10 genes per cluster
+top10_markers <- all_markers %>%
+  group_by(cluster) %>%
+  slice_max(n = 6, order_by = avg_log2FC)
+
+# 6. View results
+head(top10_markers)
+
+
+p <- DotPlot(
+  chicken_integrated_dcn_granule,
+  features = top10_markers$gene,
+  assay = "RNA",
+  cols = c("yellow", "purple"),
+  dot.scale = 10,
+  scale.by = "radius",
+  col.min = 0,
+  col.max = 1
+) +
+  scale_fill_gradient2(
+    low = "yellow",
+    mid = "yellow",
+    high = "purple",
+    midpoint = 0
+  ) +
+  RotatedAxis() +
+  theme(
+    axis.text.x = element_text(
+      angle = 90,
+      hjust = 1,
+      vjust = 0.5,
+      family = "Arial"
+    ),
+    axis.text.y = element_text(family = "Arial"),
+    text = element_text(family = "Arial")
+  )
+
+p
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/chicken_exc_dotplot.svg",
+  plot = p,
+  width = 10,
+  height = 5,
+)
+```
+
+```{r}
+
+library(dplyr)
+
+# Collector counts
+collector_counts <- table(chicken_integrated_dcn_granule$collector)
+
+chicken_integrated_dcn_granule$collector_counts <- paste0(
+  chicken_integrated_dcn_granule$collector,
+  " (",
+  collector_counts[chicken_integrated_dcn_granule$collector],
+  ")"
+)
+
+# Sample counts
+sample_counts <- table(chicken_integrated_dcn_granule$sample)
+
+chicken_integrated_dcn_granule$sample_counts <- paste0(
+  chicken_integrated_dcn_granule$sample,
+  " (",
+  sample_counts[chicken_integrated_dcn_granule$sample],
+  ")"
+)
+
+p <- DimPlot(chicken_integrated_dcn_granule, group.by  = "sample_counts")
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/tables/chicken_exc_sample_counts.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+p <- DimPlot(chicken_integrated_dcn_granule, group.by  = "collector_counts")
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/tables/chicken_exc_collector_counts.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+```
+
+
+```{r}
+chicken_integrated_dcn_granule$clusters <- Idents(chicken_integrated_dcn_granule)
+chicken_integrated_intlat = subset(chicken_integrated_dcn_granule, clusters %in% c(4))
+
+chicken_integrated_intlat <- ScaleData(chicken_integrated_intlat)
+chicken_integrated_intlat <- RunPCA(chicken_integrated_intlat)
+chicken_integrated_intlat <- RunUMAP(chicken_integrated_intlat, dims = 1:30)
+# Step 7. (Optional) Clustering
+chicken_integrated_intlat <- FindNeighbors(chicken_integrated_intlat, dims = 1:30)
+chicken_integrated_intlat = FindClusters(chicken_integrated_intlat, resolution = 0.2)
+```
+
+
+```{r}
+DimPlot(chicken_integrated_intlat, pt.size = 2)
+FeaturePlot(chicken_integrated_intlat, pt.size = 2, features = c("CNPY1", "EN1", "EN2"))
+
+```
+```{r}
+library(Seurat)
+library(ggplot2)
+library(patchwork)
+
+#chicken_integrated_intlat <- subset(chicken_integrated_intlat, med_2p_branch %in% c("IntP", "IntA/Lat"))
+#chicken_integrated_intlat <- subset(chicken_integrated_intlat, TimePoint == "E14.5")
+# --------------------------------------------------
+# Define gene modules
+# --------------------------------------------------
+ra_positive <- c(
+  #"Rarb",
+  #"Crabp2",
+  "NR2F2",
+  "NR2F1",
+  "MEIS2",
+  "MEIS1",
+  "CRABP1"
+)
+
+fgf8_positive <- c(
+  "CNPY1",
+  "EN1",
+  "EN2"
+)
+
+# --------------------------------------------------
+# Set object and grouping variable
+# --------------------------------------------------
+obj <- chicken_integrated_intlat
+
+#group_var <- "med_2p_branch"#"high_fate_label"   # change to your metadata column
+assay_name <- "RNA"
+
+#DefaultAssay(obj) <- assay_name
+
+# --------------------------------------------------
+# Keep only genes present in the object
+# --------------------------------------------------
+filter_present_genes <- function(genes, object, assay = DefaultAssay(object)) {
+  present <- genes[genes %in% rownames(object[[assay]])]
+  missing <- setdiff(genes, present)
+
+  if (length(missing) > 0) {
+    message(
+      "Missing genes: ",
+      paste(missing, collapse = ", ")
+    )
+  }
+
+  return(present)
+}
+
+ra_positive_present <- filter_present_genes(
+  ra_positive,
+  obj,
+  assay_name
+)
+
+fgf8_positive_present <- filter_present_genes(
+  fgf8_positive,
+  obj,
+  assay_name
+)
+
+#combined_alltp_sub$med_2p_branch <- factor(
+#  combined_alltp_sub$med_2p_branch,
+#  levels = c("IntP", "IntA/Lat"))
+
+# Check how many genes remain in each module
+module_gene_counts <- c(
+  RA_positive = length(ra_positive_present),
+  FGF8_positive = length(fgf8_positive_present)
+  
+)
+
+print(module_gene_counts)
+
+# --------------------------------------------------
+# Calculate module scores
+# --------------------------------------------------
+set.seed(123)
+
+obj <- AddModuleScore(
+  object = obj,
+  features = list(ra_positive_present),
+  cols = c("#228B22", "#ff9913"),#,
+  assay = assay_name,
+  name = "RA_positive_score",
+  seed = 123,
+  ctrl = 20,
+  replace = TRUE
+)
+
+obj <- AddModuleScore(
+  object = obj,
+  features = list(fgf8_positive_present),
+  cols = c("#228B22", "#ff9913"),#,
+  ctrl = 20,
+  assay = assay_name,
+  name = "FGF8_positive_score",
+  seed = 123,
+  replace = TRUE
+)
+
+
+
+# AddModuleScore appends "1" to each supplied name
+score_columns <- c(
+  "RA_positive_score1",
+  "FGF8_positive_score1"
+)
+
+# --------------------------------------------------
+# Make separate violin plots
+# --------------------------------------------------
+p_ra_positive <- VlnPlot(
+  obj,
+  features = "RA_positive_score1",
+  #group.by = group_var,
+  cols = c("#228B22", "#ff9913"),
+  pt.size = 0.5
+) +
+  labs(
+    title = "RA-positive program",
+    x = NULL,
+    y = "Module score"
+  ) +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    ),
+    legend.position = "none"
+  )
+
+p_fgf8_positive <- VlnPlot(
+  obj,
+  features = "FGF8_positive_score1",
+  #group.by = group_var,
+  cols = c("#228B22", "#ff9913"),
+  pt.size = 0.5
+) +
+  labs(
+    title = "FGF8-positive program",
+    x = NULL,
+    y = "Module score"
+  ) +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    ),
+    legend.position = "none"
+  )
+
+
+
+# --------------------------------------------------
+# Combine plots
+# --------------------------------------------------
+p_combined <- (
+  p_ra_positive |
+  p_fgf8_positive
+)
+
+
+p_combined
+
+# --------------------------------------------------
+# Save
+# --------------------------------------------------
+ggsave(
+  filename = "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/RA_FGF8_module_score_chicken_violins.svg",
+  plot = p_combined,
+  width = 11,
+  height = 8
+)
+```
+
+
+
+
+```{r}
+orth_1to1 <- orth_1to1 %>%
+  filter(
+    external_gene_name %in% rownames(combined_alltp_e13),
+    ggallus_homolog_associated_gene_name %in% rownames(chicken_integrated_intlat)
+  )
+
+mouse_genes <- orth_1to1$external_gene_name
+
+mouse_ref <- subset(
+  combined_alltp_e13,
+  features = mouse_genes
+)
+
+chicken_genes <- orth_1to1$ggallus_homolog_associated_gene_name
+
+chicken_query <- subset(
+  chicken_integrated_intlat,
+  features = chicken_genes
+)
+chicken_integrated_intlat = JoinLayers(chicken_integrated_intlat, assay = "RNA")
+library(Seurat)
+DefaultAssay(chicken_integrated_intlat) <- "RNA"
+mat <- GetAssayData(chicken_integrated_intlat, slot = "counts")
+
+new_genes <- paste0(
+  toupper(substr(rownames(mat), 1, 1)),
+  tolower(substr(rownames(mat), 2, nchar(rownames(mat))))
+)
+
+new_genes <- paste0(
+  toupper(substr(rownames(mat), 1, 1)),
+  tolower(substr(rownames(mat), 2, nchar(rownames(mat))))
+)
+
+new_genes <- make.unique(new_genes)
+
+rownames(mat) <- new_genes
+chicken_query_new <- CreateSeuratObject(
+  counts = mat,
+ # data = mat,
+  meta.data = chicken_integrated_intlat@meta.data
+
+)
+```
+
+
+
+
+
+
+
+
+
+```{r}
+p <- VlnPlot(combined_alltp_e13, features = c("Nr2f2", "Nr2f1", "Nfia",  "Nfib"), group.by = "med_2p_branch")
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/CN_e13_branchgenes.svg",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+
+p <- VlnPlot(combined_alltp_e13, features = c("Crabp1", "Meis2", "En1", "En2"), group.by = "med_2p_branch")
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/CN_e13_RAvsFGF8genes.svg",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+
+p <- VlnPlot(chicken_integrated_intlat, features = c("NR2F2", "NR2F1", "NFIA",  "NFIB"))
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/CN_chickene6_branchgenes.svg",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p <- VlnPlot(chicken_integrated_intlat, features = c("CRABP1", "MEIS2", "EN2", "EN1"))
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/CN_chickene6_RAvsFGF8genes.svg",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+```
+
+
+```{r}
+# 1. Use RNA assay (IMPORTANT: avoid integrated for expression thresholds)
+DefaultAssay(combined_alltp_e13) <- "RNA"
+
+# 2. Extract Meis2 expression
+meis2_expr <- FetchData(combined_alltp_e13, vars = "En1")
+
+# 3. Create binary cluster based on threshold
+combined_alltp_e13$Meis2_cluster <- ifelse(meis2_expr$En1 > 1, 0, 1)
+
+# 4. Convert to factor (better for plotting)
+combined_alltp_e13$Meis2_cluster <- factor(
+  combined_alltp_e13$Meis2_cluster,
+  levels = c(0, 1)
+)
+
+VlnPlot(combined_alltp_e13, features = c("Crabp1", "Meis2", "En1", "En2"), group.by = "Meis2_cluster")
+
+
+
+# 1. Use RNA assay (IMPORTANT: avoid integrated for expression thresholds)
+DefaultAssay(chicken_integrated_intlat) <- "RNA"
+
+# 2. Extract Meis2 expression
+meis2_expr <- FetchData(chicken_integrated_intlat, vars = "EN1")
+
+# 3. Create binary cluster based on threshold
+chicken_integrated_intlat$Meis2_cluster <- ifelse(meis2_expr$EN1 > 1, 0, 1)
+
+# 4. Convert to factor (better for plotting)
+chicken_integrated_intlat$Meis2_cluster <- factor(
+  chicken_integrated_intlat$Meis2_cluster,
+  levels = c(0, 1)
+)
+
+VlnPlot(chicken_integrated_intlat, features = c("CRABP1", "MEIS2", "EN2", "EN1"), group.by = "Meis2_cluster")
+
+
+```
+
+
+```{r}
+DimPlot(combined_alltp, group.by = "med_2p_branch")
+```
+
+
+```{r}
+library(Seurat)
+library(ggplot2)
+library(patchwork)
+
+combined_alltp_sub <- subset(combined_alltp, med_2p_branch %in% c("IntP", "IntA/Lat"))
+combined_alltp_sub <- subset(combined_alltp_sub, TimePoint == "E12.5")
+# --------------------------------------------------
+# Define gene modules
+# --------------------------------------------------
+ra_positive <- c(
+  #"Rarb",
+  #"Crabp2",
+  "Nr2f1",
+  "Nr2f2",
+  "Meis1",
+  "Meis2",
+  "Crabp1"
+)
+
+fgf8_positive <- c(
+  "Cnpy1",
+  "En1",
+  "En2"
+)
+
+# --------------------------------------------------
+# Set object and grouping variable
+# --------------------------------------------------
+obj <- combined_alltp_sub
+
+group_var <- "med_2p_branch"#"high_fate_label"   # change to your metadata column
+assay_name <- "SCT"
+
+#DefaultAssay(obj) <- assay_name
+
+# --------------------------------------------------
+# Keep only genes present in the object
+# --------------------------------------------------
+filter_present_genes <- function(genes, object, assay = DefaultAssay(object)) {
+  present <- genes[genes %in% rownames(object[[assay]])]
+  missing <- setdiff(genes, present)
+
+  if (length(missing) > 0) {
+    message(
+      "Missing genes: ",
+      paste(missing, collapse = ", ")
+    )
+  }
+
+  return(present)
+}
+
+ra_positive_present <- filter_present_genes(
+  ra_positive,
+  obj,
+  assay_name)
+
+fgf8_positive_present <- filter_present_genes(
+  fgf8_positive,
+  obj,
+  assay_name)
+
+# Check how many genes remain in each module
+module_gene_counts <- c(
+  RA_positive = length(ra_positive_present),
+  FGF8_positive = length(fgf8_positive_present))
+
+print(module_gene_counts)
+
+obj$med_2p_branch <- factor(
+  obj$med_2p_branch,
+  levels = c("IntP", "IntA/Lat")
+)
+
+# --------------------------------------------------
+# Calculate module scores
+# --------------------------------------------------
+set.seed(123)
+
+obj <- AddModuleScore(
+  object = obj,
+  features = list(ra_positive_present),
+  cols = c("#228B22", "#ff9913"),
+  assay = assay_name,
+  name = "RA_positive_score",
+  seed = 123
+)
+
+obj <- AddModuleScore(
+  object = obj,
+  features = list(fgf8_positive_present),
+ 
+  assay = assay_name,
+  name = "FGF8_positive_score",
+  seed = 123
+)
+
+
+
+# AddModuleScore appends "1" to each supplied name
+score_columns <- c(
+  "RA_positive_score1",
+  "FGF8_positive_score1"
+)
+
+# --------------------------------------------------
+# Make separate violin plots
+# --------------------------------------------------
+p_ra_positive <- VlnPlot(
+  obj,
+  features = "RA_positive_score1",
+  group.by = "med_2p_branch",
+  cols = c("#228B22", "#ff9913"),
+  pt.size = 0.5
+) +
+  labs(
+    title = "RA-positive program",
+    x = NULL,
+    y = "Module score"
+  ) +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    ),
+    legend.position = "none"
+  )
+
+p_fgf8_positive <- VlnPlot(
+  obj,
+  features = "FGF8_positive_score1",
+  group.by = "med_2p_branch",
+  cols = c("#228B22", "#ff9913"),
+  pt.size = 0.5
+) +
+  labs(
+    title = "FGF8-positive program",
+    x = NULL,
+    y = "Module score"
+  ) +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1
+    ),
+    legend.position = "none"
+  )
+
+
+
+# --------------------------------------------------
+# Combine plots
+# --------------------------------------------------
+p_combined <- (
+  p_ra_positive |
+  p_fgf8_positive
+)
+
+p_combined
+
+# --------------------------------------------------
+# Save
+# --------------------------------------------------
+ggsave(
+  filename = "RA_FGF8_module_score_e12.5_violins.svg",
+  plot = p_combined,
+  width = 11,
+  height = 8
+)
+```
+
+```{r}
+library(Seurat)
+library(dplyr)
+combined_alltp_sub <- subset(combined_alltp, med_2p_branch %in% c("IntP", "IntA/Lat"))
+combined_alltp_sub <- subset(combined_alltp_sub, TimePoint == "E13.5")
+
+# 1. Visualize clusters
+DimPlot(combined_alltp_sub, pt.size = 2)
+# 2. Make sure identities are set (adjust if needed)
+Idents(combined_alltp_sub) <- "med_2p_branch"
+
+# 3. Use RNA assay combined_alltp_sub DE
+DefaultAssay(combined_alltp_sub) <- "RNA"
+combined_alltp_sub <- JoinLayers(combined_alltp_sub)
+
+# 4. Find markers for all clusters
+all_markers <- FindAllMarkers(
+  combined_alltp_sub,
+  #ident.1 = 0,
+  only.pos = TRUE,
+  min.pct = 0.5,
+  logfc.threshold = 0.5
+)
+
+# 5. Get top 10 genes per cluster
+top10_markers <- all_markers %>%
+  group_by(cluster) %>%
+  slice_max(n = 20, order_by = avg_log2FC)
+
+# 6. View results
+head(top10_markers)
+
+p <- DotPlot(
+  combined_alltp_sub,
+  features = top10_markers$gene,
+  #group.by = "ident",
+  assay = "RNA",
+  #group.by = 'med_2p_branch_full',
+  cols = c('yellow', 'purple'),
+  dot.min = -0.6,
+  dot.scale = 10,
+  col.min = -1,
+  col.max = 2
+  #min.pct = 0.25
+) + 
+  scale_fill_gradient2(
+    low = "yellow",
+    mid = "yellow",
+    high = "purple",
+    midpoint = 0
+  ) +
+  RotatedAxis() +
+  theme(
+    axis.text.x = element_text(
+      angle = 90,   # vertical text
+      hjust = 1,
+      vjust = 0.5,
+      family = "Arial"
+    ),
+    axis.text.y = element_text(family = "Arial"),
+    text = element_text(family = "Arial")
+  )
+
+p
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/mouse_intpintalat_e13.5_deg.svg",
+  plot = p,
+  width = 10,
+  height = 5,
+)
+```
+
+
+```{r}
+library(Seurat)
+library(dplyr)
+
+# 1. Visualize clusters
+DimPlot(chicken_integrated_intlat, pt.size = 2)
+# 2. Make sure identities are set (adjust if needed)
+Idents(chicken_integrated_intlat) <- "seurat_clusters"
+
+# 3. Use RNA assay for DE
+DefaultAssay(chicken_integrated_intlat) <- "RNA"
+chicken_integrated_intlat <- JoinLayers(chicken_integrated_intlat)
+
+# 4. Find markers for all clusters
+all_markers <- FindAllMarkers(
+  chicken_integrated_intlat,
+  #ident.1 = 0,
+  only.pos = TRUE,
+  min.pct = 0.5,
+  logfc.threshold = 0.5
+)
+
+# 5. Get top 10 genes per cluster
+top10_markers <- all_markers %>%
+  group_by(cluster) %>%
+  slice_max(n = 20, order_by = avg_log2FC)
+
+# 6. View results
+head(top10_markers)
+
+p <- DotPlot(
+  chicken_integrated_intlat,
+  features = top10_markers$gene,
+  #group.by = "ident",
+  assay = "RNA",
+  #group.by = 'med_2p_branch_full',
+  cols = c('yellow', 'purple'),
+  dot.min = -0.6,
+  dot.scale = 10,
+  col.min = -1,
+  col.max = 2
+  #min.pct = 0.25
+) + 
+  scale_fill_gradient2(
+    low = "yellow",
+    mid = "yellow",
+    high = "purple",
+    midpoint = 0
+  ) +
+  RotatedAxis() +
+  theme(
+    axis.text.x = element_text(
+      angle = 90,   # vertical text
+      hjust = 1,
+      vjust = 0.5,
+      family = "Arial"
+    ),
+    axis.text.y = element_text(family = "Arial"),
+    text = element_text(family = "Arial")
+  )
+
+p
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/chicken_intlat_deg.svg",
+  plot = p,
+  width = 10,
+  height = 5,
+)
+```
+```{r}
+DimPlot(combined_alltp_e13, group.by = "med_2p_branch",  pt.size = 2)
+chicken_integrated_intlat <- RenameIdents(
+    chicken_integrated_intlat,
+  "0" = "1",
+  "1" = "0"
+)
+
+DimPlot(
+  chicken_integrated_intlat,
+  cols = c("#228B22", "red"),
+  pt.size = 2
+)
+p <- VlnPlot(chicken_integrated_intlat,cols = c("#228B22", "#ff9913"), features = c("NR2F2", "NR2F1"))
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/chicken_nr2f2_nr2f1.svg",
+  plot = p,
+  width = 10,
+  height = 5,
+)
+p <- VlnPlot(chicken_integrated_intlat,cols = c("#228B22", "#ff9913"), features = c("NFIA", "NFIB"))
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/chicken_nfia_nfib.svg",
+  plot = p,
+  width = 10,
+  height = 5,
+)
+p <- VlnPlot(chicken_integrated_intlat,cols = c("#228B22", "#ff9913"), features = c("MEIS2","CRABP1"))
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/chicken_meis2_crabp1.svg",
+  plot = p,
+  width = 10,
+  height = 5,
+)
+p <- VlnPlot(chicken_integrated_intlat,cols = c("#228B22", "#ff9913"), features = c("EN1","EN2"))
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/chicken_en1_en2.svg",
+  plot = p,
+  width = 10,
+  height = 5,
+)
+
+```
+
+
+```{r}
+combined_alltp_e13 = subset(combined_alltp, subset = med_2p_branch %in% c('IntA/Lat', "IntP"))
+combined_alltp_e13 = subset(combined_alltp_e13, subset = TimePoint %in% c("E12.5"))
+#combined_alltp_e13 <- RunPCA(combined_alltp_e13)
+#combined_alltp_e13 <- RunUMAP(combined_alltp_e13, dims = 1:30)
+
+#combined_alltp_e13 <- FindClusters(combined_alltp_e13, resolution = 0.4)
+```
+
+
+```{r}
+DimPlot(combined_alltp_e13, group.by = "med_2p_branch")
+FeaturePlot(combined_alltp_e13, features = c("En1", "Crabp1"), max.cutoff = 3)
+FeaturePlot(combined_alltp_e13, features = c("Olig2", "Meis2"), max.cutoff = 3)
+FeaturePlot(combined_alltp_e13, features = c("Nr2f2", "Nfia"), max.cutoff = 3)
+
+```
+```{r}
+# 1. extract gene names
+genes <- rownames(chicken_integrated_intlat)
+
+# 2. capitalize (Mouse-style)
+genes_cap <- paste0(
+  toupper(substr(genes, 1, 1)),
+  tolower(substr(genes, 2, nchar(genes)))
+)
+
+# 3. identify non-duplicated genes AFTER capitalization
+keep <- !duplicated(genes_cap)
+
+# 4. subset Seurat object BEFORE renaming
+chicken_clean <- chicken_integrated_intlat[keep, ]
+
+# 5. assign cleaned gene names
+rownames(chicken_clean) <- genes_cap[keep]
+```
+
+
+```{r}
+common_genes <- intersect(
+  rownames(combined_alltp_e13),
+  rownames(chicken_clean)
+)
+
+length(common_genes)  # sanity check
+
+combined_ref <- subset(combined_alltp_e13, features = common_genes)
+
+chicken_sub <- chicken_clean# (counts = counts)
+common_genes <- intersect(rownames(combined_ref), rownames(chicken_sub))
+
+combined_ref <- subset(combined_ref, features = common_genes)
+chicken_sub  <- subset(chicken_sub, features = common_genes)
+
+
+chicken_sub <- ProjectDim(
+  object = chicken_sub,
+  reduction = combined_ref[["pca"]],
+  assay = "RNA"
+)
+```
+```{r}
+DimPlot(combined_alltp)
+FeaturePlot(combined_alltp, features = c("Nr2f2", "Nfia"), max.cutoff = 2)
+```
+
+```{r}
+library(Seurat)
+
+# 1. Visualize genes
+
+combined_alltp_e13 = subset(combined_alltp, subset = TimePoint == c("E12.5","E13.5"))
+combined_alltp_e13 = subset(combined_alltp_e13, med_2p_branch %in% c("IntP", "IntA/Lat"))
+# 2. Use normalized combined_alltp_e13 data
+DefaultAssay(combined_alltp_e13) <- "RNA"
+
+# 3. Fetch EN1 and EN2 expression
+expr <- FetchData(
+  combined_alltp_e13,
+  vars = c("En1"),
+  slot = "data"
+)
+
+# 4. Define groups:
+# EN1/EN2 positive = either gene expressed
+# double negative = neither expressed
+combined_alltp_e13$MEIS2_group <- ifelse(
+  expr$En1 > 2,
+  "EN_pos",
+  "EN_neg"
+)
+
+# Optional: set order
+combined_alltp_e13$MEIS2_group <- factor(
+  combined_alltp_e13$MEIS2_group,
+  levels = c("EN_pos", "EN_neg")
+)
+
+# 5. Violin plot
+VlnPlot(
+  combined_alltp_e13,
+  features = c("Crabp1","Meis2"),
+  group.by = "med_2p_branch",
+  pt.size = 0.1
+)
+
+library(Seurat)
+
+# Set the order of the identities
+combined_alltp_e13$med_2p_branch <- factor(
+  combined_alltp_e13$med_2p_branch,
+  levels = c("IntP", "IntA/Lat")
+)
+```
+
+
+```{r}
+# Define colors
+branch_cols <- c(
+   "IntA/Lat"     = "#ff9913",
+  "IntA"     = "#D19",
+  "Lat"     = "#950606",
+  "RL"           = "lightblue",
+  "IntP"         = "#228B22"
+)
+
+p <- VlnPlot(
+  combined_alltp_e13,
+  features = c("Nr2f2", "Nr2f1"),
+  group.by = "med_2p_branch",
+  cols = branch_cols,
+  pt.size = 0.1
+)
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/e13_nr2f2_nr2f1.svg",
+  plot = p,
+  width = 10,
+  height = 5,
+)
+p <- VlnPlot(
+  combined_alltp_e13,
+  features = c("Nfia", "Nfib"),
+  group.by = "med_2p_branch",
+  cols = branch_cols,
+  pt.size = 0.1
+)
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/e13_nfia_nfib.svg",
+  plot = p,
+  width = 10,
+  height = 5,
+)
+p <- VlnPlot(
+  combined_alltp_e13,
+  features = c("Crabp1", "Meis2"),
+  group.by = "med_2p_branch",
+  cols = branch_cols,
+  pt.size = 0.1
+)
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/e13_crabp1_meis2.svg",
+  plot = p,
+  width = 10,
+  height = 5,
+)
+p <- VlnPlot(
+  combined_alltp_e13,
+  features = c("En1", "En2"),
+  group.by = "med_2p_branch",
+  cols = branch_cols,
+  pt.size = 0.1
+)
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/e13_en1_en2.svg",
+  plot = p,
+  width = 10,
+  height = 5,
+)
+```
+
+```{r}
+library(Seurat)
+
+DefaultAssay(chicken_integrated_intlat) <- "RNA"
+
+# 3. Fetch EN1 and EN2 expression
+expr <- FetchData(
+  chicken_integrated_intlat,
+  vars = c("MEIS2"),
+  slot = "data"
+)
+
+# 4. Define groups:
+# EN1/EN2 positive = either gene expressed
+# double negative = neither expressed
+chicken_integrated_intlat$MEIS2_group <- ifelse(
+  expr$MEIS2 > 2,
+  "MEIS2_pos",
+  "MEIS2_neg"
+)
+
+# Optional: set order
+chicken_integrated_intlat$MEIS2_group <- factor(
+  chicken_integrated_intlat$MEIS2_group,
+  levels = c("MEIS2_pos", "MEIS2_neg")
+)
+
+# 5. Violin plot
+VlnPlot(
+  chicken_integrated_intlat,
+  features = c("EN1","EN2"),
+  group.by = "clusters",
+  pt.size = 0.1
+)
+
+
+```
+
+
+```{r}
+
+chicken_integrated_dcn_granule <- FindClusters(chicken_integrated_dcn_granule, resolution=2)
+DimPlot(chicken_integrated_dcn_granule, label = TRUE, pt.size = 1)
+FeaturePlot(chicken_integrated_dcn_granule, features = "ZFHX3", pt.size = 1)
+FeaturePlot(chicken_integrated_dcn_granule, features = "LHX9", pt.size = 1)
+FeaturePlot(chicken_integrated_dcn_granule, features = "LMX1A", pt.size = 1)
+FeaturePlot(chicken_integrated_dcn_granule, features = "MEIS2", pt.size = 1, max.cutoff = 2, min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn_granule, features = "NFIA", pt.size = 1)
+
+```
+```{r}
+DimPlot(chicken_integrated_dcn_granule,cols = c("purple", "blue",  "orange","#228B22","black"),  group.by = "cell_type", pt.size = 1)
+
+p<- DimPlot(chicken_integrated_dcn_granule, cols = c("purple", "orange","orange","orange","black"), group.by = "cell_type")
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/chicken_cell_type_latsplit.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+```
+
+
+```{r}
+# Merge clusters 0, 5, 11 into "Cluster0"
+#chicken_integrated_dcn_granule$cell_type <- "Midbrain-fated Cells"
+chicken_integrated_dcn_granule$cell_type <- Idents(chicken_integrated_dcn_granule)
+levels(chicken_integrated_dcn_granule$cell_type) <- list(
+  "Granule Cells+UBCs" = c("6", "8","0","5","22","21","2","4", "15", "19"),
+  "med" = "14",
+  "med" = c("9", "7"),
+  #"med3" = "7",
+  "lat1" = "12",
+  "lat2" = "13",
+  "lat2" = "10",
+  #"lat4" = "16",
+  "Midbrain-fated Cells" = c("16", "1", "17", "3", "23", "18", "11", "20")
+)
+chicken_integrated_dcn_granule$branch <- Idents(chicken_integrated_dcn_granule)
+levels(chicken_integrated_dcn_granule$branch) <- list(
+  "late" = c("6", "8","0","5","22","21","2","4", "15"),
+  "late" = "14",
+  "late" = "9",
+  "late" = "7",
+  "early" = "12",
+  "early" = "13",
+  "early" = "10",
+  "early" = "16",
+  "early" = c("1", "17", "3", "23", "18", "11", "20")
+)
+
+library(forcats)
+
+chicken_integrated_dcn_granule$cell_type_ref_mouse <-
+  forcats::fct_recode(
+    chicken_integrated_dcn_granule$cell_type,
+    "early"   = "med1",
+    "early"   = "med2",
+    "late"    = "med3",
+    "intp"= "lat2",
+    "int prog"= "lat5",
+    "int prog"= "lat3",
+    "inta/lat"    = "lat4",
+    "intp"    = "lat6"
+    # levels not mentioned are kept as-is
+  )
+
+chicken_integrated_dcn_granule$cell_type_general <-
+  forcats::fct_recode(
+    chicken_integrated_dcn_granule$cell_type,
+    "med1"   = "med1",
+    "med2"   = "med2",
+    "med3"    = "med3",
+    "med4" = "med4",
+    "lat1"= "lat2",
+    "lat3"= "lat5",
+    "lat3"= "lat3",
+    "lat2"    = "lat4",
+    "lat1"    = "lat6"
+    # levels not mentioned are kept as-is
+  )
+
+chicken_integrated_dcn_granule$cell_type_ref_chicken <-
+  forcats::fct_recode(
+    chicken_integrated_dcn_granule$cell_type,
+    "Early Medial"   = "med1",
+    "Early Medial"   = "med2",
+    "Late Medial"    = "med3",
+    "Late Medial"    = "med4",
+    "int prog"= "lat2",
+    "int prog"= "lat5",
+    "int prog"= "lat3",
+    "IntP"    = "lat4",
+    "IntP"    = "lat6"
+    # levels not mentioned are kept as-is
+  )
+
+
+# Verify
+table(chicken_integrated_dcn_granule$cell_type)
+
+# Verify
+table(Idents(chicken_integrated_dcn_granule))
+
+```
+```{r}
+DimPlot(
+  chicken_integrated_dcn_granule,
+  group.by = "cell_type",
+ 
+  pt.size = 1
+)
+```
+```{r}
+load("C:/Users/kebsc/Downloads/GSE160471_RAW/GSM4873767_chicken_data.RData/GSM4873767_chicken_data.RData")
+rm(inh)
+ex <- UpdateSeuratObject(ex)
+
+############################################
+## 0. Packages
+############################################
+library(Seurat)
+library(MetaNeighbor)
+library(homologene)
+library(SummarizedExperiment)
+library(Matrix)
+
+############################################
+## 1. Extract expression matrices (Seurat v5)
+############################################
+# Use normalized RNA data (NOT scaled)
+############################################
+chicken_integrated_dcn_granule_sub <- subset(
+  chicken_integrated_dcn_granule, 
+  !(cell_type %in% c("Midbrain-fated Cells", "Granule Cells+UBCs", 'int prog'))
+)
+
+chicken_integrated_dcn_granule_sub <- subset(
+  chicken_integrated_dcn_granule, 
+  !(cell_type %in% c("Midbrain-fated Cells", "Granule Cells+UBCs", 'int prog'))
+)
+
+chicken_expr <- chicken_integrated_dcn_granule_sub@assays$integrated$data
+
+ #GetAssayData(
+#  ex,
+#  layer = "data"
+#)
+
+############################################
+## 2. Cluster identities
+############################################
+chicken_clusters <- chicken_integrated_dcn_granule_sub$cell_type
+# Option 1: rename levels in place
+
+#ex = subset(ex, !(merged.res.3.m.renamed %in% c("Med.A1", "Med.B1")))
+
+ex$cluster_simple <- sub("\\..*$", "", ex$merged.res.3.m.renamed)
+ex$med_label_clean <- gsub("[0-9]+$", "", ex$merged.res.3.m.renamed)
+exceptions <- c("IntP.A", "IntP.B")
+# Original cluster labels
+# Original labels
+labels <- ex$med_label_clean
+
+# Keep exceptions, otherwise extract only a or b at the end
+ex$med_label_grouped <- ifelse(
+  labels %in% exceptions,
+  labels,                            # leave exceptions unchanged
+  sub(".*\\.(A|B).*", "\\1", labels) # keep only a or b at the end
+)
+
+#ex = subset(ex, cluster_simple != "IntP")
+# Start from med_label_grouped
+cl <- as.character(ex$cluster_simple)
+
+# Create new grouping
+ex$final_group <- cl
+
+# Collapse IntP into one group
+ex$final_group[cl %in% c("IntP.A", "IntP.B")] <- "IntP"
+
+# Rename A/B to medA/medB
+ex$final_group[cl == "A"] <- "MedA"
+ex$final_group[cl == "B"] <- "MedB"
+
+# Optional: make factor
+ex$final_group <- factor(ex$final_group)
+
+ex_clusters   <- ex$cluster_simple#cluster_simple_intp #Idents(mouse_data)
+
+ex_expr <- ex@assays$RNA$data
+
+
+############################################
+## 5. Align genes across species
+############################################
+shared_genes <- intersect(
+  rownames(ex_expr),
+  rownames(chicken_expr)
+)
+
+ex_expr   <- ex_expr[shared_genes, ]
+# 1. Extract expression matrix for shared genes
+chicken_expr <- chicken_expr[shared_genes, ]
+
+# 2. Extract cluster labels
+
+
+############################################
+## 6. Combine expression matrices
+############################################
+expr_all <- cbind(ex_expr, chicken_expr)
+
+############################################
+## 7. MetaNeighbor metadata
+############################################
+cell_metadata <- data.frame(
+  cell_id = colnames(expr_all),
+  species = c(
+    rep("adult", ncol(ex_expr)),
+    rep("chicken", ncol(chicken_expr))
+  ),
+  cluster = c(
+    as.character(ex_clusters),
+    as.character(chicken_clusters)
+  )
+)
+
+
+rownames(cell_metadata) <- cell_metadata$cell_id
+
+############################################
+## 8. Gene set (recommended: mouse HVGs)
+############################################
+#geneset <- intersect(
+#  FindAllMarkers(ex, group.by = "merged.res.3.m.renamed")$gene,
+#  rownames(expr_all)
+#  )
+#geneset <- intersect(
+#  rownames(expr_all),
+#  rownames(expr_all)
+#)
+#genes1 <- FindAllMarkers(RL, group.by = "final.clusters2")$gene
+#genes2 <- FindAllMarkers(chicken_integrated_dcn_granule_sub, group.by = "cell_type_general")$gene
+
+#genes1 <- toupper(genes1)
+
+
+geneset <- intersect(
+  rownames(expr_all),
+  rownames(expr_all)
+)
+
+geneset_idx <- which(rownames(expr_all) %in% geneset)
+
+############################################
+## 9. Wrap expression in SummarizedExperiment
+############################################
+# This avoids the MetaNeighbor dgCMatrix assay() bug
+se <- SummarizedExperiment(
+  assays = list(expr = expr_all)
+)
+
+############################################
+## 10. Run MetaNeighbor (THIS WORKS)
+############################################
+############################################
+## 8. Gene set FIX: use all shared genes
+############################################
+geneset_idx <- seq_len(nrow(expr_all))
+
+mn <- MetaNeighborUS(
+  var_genes = geneset,
+  dat = se,
+  study_id = cell_metadata$species,
+  cell_type = cell_metadata$cluster,
+  fast_version = TRUE
+)
+
+############################################
+## 11. Mouse ↔ Chicken AUROC matrix
+############################################
+# Full AUROC matrix
+auroc <- mn
+
+# Identify mouse and chicken rows/cols by name
+ex_rows    <- grep("^adult\\|", rownames(auroc), value = TRUE)
+chicken_cols  <- grep("^chicken\\|", colnames(auroc), value = TRUE)
+
+ex_vs_chicken <- auroc[ex_rows, chicken_cols]
+
+
+
+
+
+
+############################################
+## 12. Plot
+############################################
+library(pheatmap)
+
+pheatmap(
+  ex_vs_chicken,
+  color = colorRampPalette(c("white", "red"))(100),
+  breaks = seq(0.5, 1, length.out = 101),
+  dendrogram = FALSE,
+  display_numbers = TRUE,         # Show numbers on each cell
+  number_format = "%.2f",         # 2 decimal places
+  main = "MetaNeighbor AUROC: Adult vs Chick (by chance = 0.5)"
+)
+
+
+```
+
+```{r}
+library(Seurat)
+load("C:/Users/kebsc/Downloads/GSE160471_RAW/GSM4873767_chicken_data.RData/GSM4873767_chicken_data.RData")
+rm(inh)
+ex <- UpdateSeuratObject(ex)
+ex$cluster_simple <- sub("\\..*$", "", ex$merged.res.3.m.renamed)
+
+# Subset IntP cells
+intP <- subset(ex, subset = cluster_simple == "IntP")
+
+
+
+# Build graph and cluster
+intP <- FindNeighbors(intP, dims = 1:30)
+intP <- FindClusters(intP, resolution =0.5)
+
+# Name subclusters
+intP$cluster_simple <- paste0("Lat_", Idents(intP))
+
+# Merge Lat_1 and Lat_2
+#intP$cluster_simple[intP$cluster_simple %in% c("Lat_0", "Lat_2")] <- "Lat_0"
+
+# Copy labels back to the original object
+ex$cluster_simple[colnames(intP)] <- intP$cluster_simple
+
+# Plot on the ORIGINAL UMAP embedding
+DimPlot(ex, group.by = "cluster_simple", label = TRUE, pt.size = 3)
+```
+
+```{r}
+intP$cluster_simple[intP$cluster_simple %in% c("Lat_0")] <- "Lat_11"
+
+intP$cluster_simple[intP$cluster_simple %in% c("Lat_1", "Lat_2")] <- "Lat_0"
+intP$cluster_simple[intP$cluster_simple %in% c("Lat_11")] <- "Lat_1"
+
+ex$cluster_simple[colnames(intP)] <- intP$cluster_simple
+#ex <- subset(ex, !(cluster_simple %in% c("Med", "IntX", "MedL")))
+```
+
+
+```{r}
+DimPlot(ex, group.by = "cluster_simple", pt.size=2)
+```
+```{r}
+ex_ = subset(ex, cluster_simple = c("Lat_0", "Lat_1"))
+
+intP$cluster_simple <- factor(
+  intP$cluster_simple,
+  levels = c("Lat_0", "Lat_1")
+)
+
+p <- VlnPlot(intP, group.by = "cluster_simple", cols = c("#228B22", "#ff9913"), features = "NR2F2")
+p
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/adult_chicken_nr2f2.svg",
+  plot = p,
+  width = 3,
+  height = 5,
+)
+p <- VlnPlot(intP, group.by = "cluster_simple", cols = c("#228B22", "#ff9913"), features = "NFIB")
+p
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/adult_chicken_nfib.svg",
+  plot = p,
+  width = 3,
+  height = 5,
+)
+```
+
+
+```{r}
+#VlnPlot(ex, group.by = "cluster_simple", features = "XDH", cols = )
+#VlnPlot(ex, group.by = "cluster_simple", features = c("SLC17A6", "TAC1", "KCNAB1", "ADCYAP1", "RTN4R", "PKIB", "XDH"))
+p <- VlnPlot(ex, group.by = "cluster_simple", cols = c("#228B22", "#ff9913"), features = c("XDH"))
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/adult_chicken_xdh.svg",
+  plot = p,
+  width = 3,
+  height = 5,
+)
+p
+```
+```{r}
+p <- VlnPlot(ex, group.by = "cluster_simple", cols = c("#228B22", "#ff9913"), features = c("TAC1"))
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/adult_chicken_tac1.svg",
+  plot = p,
+  width = 5,
+  height = 5,
+)
+p
+```
+
+
+```{r}
+load("C:/Users/kebsc/Downloads/GSE160471_RAW/GSM4873765_mouse_data.RData/GSM4873765_mouse_data.RData")
+rm(VZ)
+RL <- UpdateSeuratObject(RL)
+```
+
+```{r}
+RL_intlat = subset(RL, idents = c("IntP", "IntA", "Lat"))
+
+Idents(RL_intlat) <- factor(
+  Idents(RL_intlat),
+  levels = c("IntP", "IntA", "Lat")
+)
+
+p <- VlnPlot(RL_intlat, features = "Nr2f2",  c("#228B22", "#ff9913", "#ff9913"),layer = "data")
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/adult_mouse_nr2f2.svg",
+  plot = p,
+  width = 3,
+  height = 5,
+)
+#VlnPlot(RL_intlat, features = "Nr2f1", layer = "data")
+p <- VlnPlot(RL_intlat, features = "Nfib", c("#228B22", "#ff9913", "#ff9913"), layer = "data")
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/adult_mouse_nfib.svg",
+  plot = p,
+  width = 3,
+  height = 5,
+)
+#VlnPlot(RL_intlat, features = "Nfib", layer = "data")
+
+```
+
+
+
+```{r}
+############################################
+## 0. Packages
+############################################
+library(Seurat)
+library(MetaNeighbor)
+library(homologene)
+library(SummarizedExperiment)
+library(Matrix)
+branch_pal = c(
+  "Med" = "blue",
+  "MedL" = "#8a6740",
+  "MedDL" = "lightblue",
+  "IntP" = "#228B22",
+  "IntA" = "pink",
+  "Lat" = "#950606")
+
+p <- DimPlot(RL, cols = branch_pal, group.by = "subareas",  pt.size = 2)
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/adultmouse_CNlabel.svg",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+branch_pal = c(
+  "Med" = "blue",
+  "MedL" = "#8a6740",
+  #"MedDL" = "lightblue",
+  "Lat_0" = "#228B22",
+  "Lat_1" = "lightgreen",
+  "Lat_2" = "#ff9913")
+  
+p <- DimPlot(ex, cols = branch_pal, group.by = "cluster_simple", pt.size = 2)
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/adultchicken_CNlabel.svg",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+```
+```{r}
+p <- FeaturePlot(RL, features = "Nr2f2",  pt.size = 2)
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/adultmouse_Nr2f2.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+p <- FeaturePlot(ex, features = "NR2F2", pt.size = 2)
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/adultchicken_NR2F2.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+p <- FeaturePlot(RL, features = "Nr2f1",  pt.size = 2)
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/adultmouse_Nr2f1.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+p <- FeaturePlot(ex, features = "NR2F1", pt.size = 2)
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/adultchicken_NR2F1.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+p <- FeaturePlot(RL, features = "Nfia",  pt.size = 2)
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/adultmouse_Nfia.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+p <- FeaturePlot(ex, features = "NFIA", pt.size = 2)
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/adultchicken_NFIA.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+p <- FeaturePlot(RL, features = "Nfib",  pt.size = 2)
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/adultmouse_Nfib.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+p <- FeaturePlot(ex, features = "NFIB", pt.size = 2)
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/adultchicken_NFIB.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+```
+
+
+
+
+
+```{r}
+############################################
+## Choose gene set for MetaNeighbor
+############################################
+gene_set_method <- "shared"   # "markers", "variable", or "shared"
+
+############################################
+## Cluster identities
+############################################
+ex <- subset(ex, !(cluster_simple %in% c("Med", "IntX", "MedL")))
+RL <- subset(RL, !(subareas %in% c("Med", "MedDL", "MedL")))
+
+chicken_clusters <- ex$cluster_simple
+mouse_clusters <- RL$subareas
+
+DefaultAssay(RL) <- "RNA"
+DefaultAssay(ex) <- "RNA"
+
+############################################
+## Calculate variable genes (if selected)
+############################################
+if (gene_set_method == "variable") {
+
+  RL <- FindVariableFeatures(
+    RL,
+    assay = "RNA",
+    nfeatures = 500)
+
+  ex <- FindVariableFeatures(
+    ex,
+    assay = "RNA",
+    nfeatures = 500)
+
+}
+
+############################################
+## Extract expression
+############################################
+mouse_expr <- GetAssayData(
+  RL,
+  layer = "data",
+  assay = "RNA"
+)
+
+chicken_expr <- GetAssayData(
+  ex,
+  layer = "data",
+  assay = "RNA"
+)
+
+############################################
+## Chicken → Mouse orthologs
+############################################
+orthologs <- homologene(
+  genes = rownames(chicken_expr),
+  inTax = 9031,
+  outTax = 10090
+)
+
+orthologs <- orthologs[, c("9031", "10090")]
+colnames(orthologs) <- c("chicken_gene", "mouse_gene")
+
+# strict 1-to-1 orthologs
+orthologs <- orthologs[
+  !duplicated(orthologs$chicken_gene) &
+  !duplicated(orthologs$mouse_gene),
+]
+
+############################################
+## Map chicken genes to mouse genes
+############################################
+common_chicken <- intersect(
+  rownames(chicken_expr),
+  orthologs$chicken_gene
+)
+
+gene_map <- orthologs[
+  match(common_chicken, orthologs$chicken_gene),
+]
+
+chicken_mapped <- chicken_expr[common_chicken, ]
+rownames(chicken_mapped) <- gene_map$mouse_gene
+
+
+############################################
+## Align genes
+############################################
+shared_genes <- intersect(
+  rownames(mouse_expr),
+  rownames(chicken_mapped)
+)
+
+mouse_expr <- mouse_expr[shared_genes, ]
+chicken_expr <- chicken_mapped[shared_genes, ]
+
+
+############################################
+## Select gene set
+############################################
+
+if (gene_set_method == "variable") {
+
+  mouse_hvg <- VariableFeatures(RL)
+
+  chicken_hvg <- unique(
+    orthologs$mouse_gene[
+      match(
+        VariableFeatures(ex),
+        orthologs$chicken_gene
+      )
+    ]
+  )
+
+  chicken_hvg <- chicken_hvg[!is.na(chicken_hvg)]
+
+  geneset <- Reduce(intersect, list(
+    mouse_hvg,
+    chicken_hvg,
+    rownames(mouse_expr),
+    rownames(chicken_expr)
+  ))
+
+
+} else if (gene_set_method == "shared") {
+
+  geneset <- shared_genes
+
+
+} else if (gene_set_method == "markers") {
+
+  mouse_markers <- FindAllMarkers(
+    RL,
+    assay = "RNA",
+    group.by = "subareas",
+    only.pos = TRUE,
+    logfc.threshold = 0.25,
+    min.pct = 0.1
+  )
+
+  chicken_markers <- FindAllMarkers(
+    ex,
+    assay = "RNA",
+    group.by = "cluster_simple",
+    only.pos = TRUE,
+    logfc.threshold = 0.25,
+    min.pct = 0.1
+  )
+
+  library(dplyr)
+
+  mouse_markers <- mouse_markers %>%
+    group_by(cluster) %>%
+    slice_max(avg_log2FC, n = 100)
+
+  chicken_markers <- chicken_markers %>% 
+    group_by(cluster) %>%
+    slice_max(avg_log2FC, n = 100)
+
+  mouse_marker_genes <- unique(mouse_markers$gene)
+
+  chicken_marker_genes <- unique(
+    orthologs$mouse_gene[
+      match(
+        chicken_markers$gene,
+        orthologs$chicken_gene
+      )
+    ]
+  )
+
+  geneset <- Reduce(intersect, list(
+    mouse_marker_genes,
+    chicken_marker_genes,
+    rownames(mouse_expr),
+    rownames(chicken_expr)
+  ))
+
+}
+
+
+cat(
+  "Using",
+  length(geneset),
+  "genes (",
+  gene_set_method,
+  ")\n"
+)
+
+
+############################################
+## Combine matrices
+############################################
+expr_all <- cbind(
+  mouse_expr,
+  chicken_expr
+)
+
+cell_metadata <- data.frame(
+  cell_id = colnames(expr_all),
+  species = c(
+    rep("mouse", ncol(mouse_expr)),
+    rep("chicken", ncol(chicken_expr))
+  ),
+  cluster = c(
+    as.character(mouse_clusters),
+    as.character(chicken_clusters)
+  ),
+  row.names = colnames(expr_all)
+)
+
+
+############################################
+## MetaNeighbor
+############################################
+se <- SummarizedExperiment(
+  assays = list(expr = expr_all)
+)
+
+
+mn <- MetaNeighborUS(
+  var_genes = geneset,
+  dat = se,
+  study_id = cell_metadata$species,
+  cell_type = cell_metadata$cluster,
+  fast_version = TRUE
+)
+
+############################################
+## 11. Mouse ↔ Chicken AUROC matrix
+############################################
+
+auroc <- mn
+
+mouse_rows   <- grep("^mouse\\|", rownames(auroc), value = TRUE)
+chicken_cols <- grep("^chicken\\|", colnames(auroc), value = TRUE)
+
+mouse_vs_chicken <- auroc[mouse_rows, chicken_cols]
+
+# Remove species prefixes
+rownames(mouse_vs_chicken) <- sub("^mouse\\|", "", rownames(mouse_vs_chicken))
+colnames(mouse_vs_chicken) <- sub("^chicken\\|", "", colnames(mouse_vs_chicken))
+
+# Desired order
+mouse_order <- c("IntP", "IntA", "Lat", "Med", "MedDL", "MedL")
+chicken_order <- c("Lat_0", "Lat_1", "Lat_2", "IntX", "Med", "MedL")
+
+# Keep only clusters present and reorder
+mouse_order <- intersect(mouse_order, rownames(mouse_vs_chicken))
+chicken_order <- intersect(chicken_order, colnames(mouse_vs_chicken))
+
+mouse_vs_chicken <- mouse_vs_chicken[mouse_order, chicken_order]
+
+############################################
+## 12. Plot
+############################################
+```
+
+
+```{r}
+p <- pheatmap(
+  mouse_vs_chicken,
+  cluster_rows = FALSE,
+  cluster_cols = FALSE,
+  color = colorRampPalette(c("white", "red"))(100),
+  breaks = seq(0.5, 1, length.out = 101),
+  display_numbers = TRUE,
+  number_format = "%.2f",
+  main = "MetaNeighbor AUROC: Adult vs Chick (by chance = 0.5)"
+)
+```
+```{r}
+DimPlot(ex, group.by= "cluster_simple")
+```
+
+
+```{r}
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/adult_chickenvsmouse_lat_heatmap.svg",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+```
+
+```{r}
+FeaturePlot(chicken_integrated_dcn_granule, features = "LHX9", max.cutoff = 2)
+FeaturePlot(chicken_integrated_dcn_granule, features = "PAX6", max.cutoff = 2)
+
+DimPlot(chicken_integrated_dcn_granule, group.by = "branch")
+#DimPlot(chicken_integrated_dcn_granule_plot_sub, group.by = "cell_type")
+```
+```{r}
+chicken_integrated_dcn_granule$timepoint <- ifelse(
+  chicken_integrated_dcn_granule$collector == "me_2",
+  "E6/7",
+  sub(".*_", "", chicken_integrated_dcn_granule$sample)
+)
+chicken_integrated_dcn_granule
+p <- DimPlot(
+  chicken_integrated_dcn_granule,
+  group.by = "timepoint",
+ 
+  pt.size = 1
+)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/chicken_timepoint.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+```
+
+
+```{r}
+p <- DimPlot(
+  chicken_integrated_dcn_granule,
+  group.by = "branch",
+  cols = c(
+    #"transition" = "lightblue",  # swapped
+    "early" = "maroon",
+    "late" = "darkgreen"         # swapped
+  ),
+  pt.size = 1
+)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/chicken_earlyvslatebranch.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+p <- FeaturePlot(
+  chicken_integrated_dcn_granule,
+  feature = "PAX6",
+  max.cutoff = 2,
+  min.cutoff = 0,
+  pt.size = 1
+)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/chicken_Pax6.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+p <- FeaturePlot(
+  chicken_integrated_dcn_granule,
+  feature = "LHX9",
+  max.cutoff = 2,
+  min.cutoff = 0,
+  pt.size = 1
+)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/chicken_Lhx9.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+p <- FeaturePlot(
+  chicken_integrated_dcn_granule,
+  feature = "MEIS2",
+  max.cutoff = 2,
+  min.cutoff = 0,
+  pt.size = 1
+)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/chicken_Meis2.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+p <- FeaturePlot(
+  chicken_integrated_dcn_granule,
+  feature = "ZFHX3",
+  max.cutoff = 2,
+  min.cutoff = 0,
+  pt.size = 1
+)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/chicken_Zfhx3.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+p <- FeaturePlot(
+  chicken_integrated_dcn_granule,
+  feature = "LMX1A",
+  max.cutoff = 2,
+  min.cutoff = 0,
+  pt.size = 1
+)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/chicken_Lmx1a.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+```
+
+
+```{r}
+p <- FeaturePlot(
+  chicken_integrated_dcn_granule,
+  feature = "TOP2A",
+  max.cutoff = 2,
+  min.cutoff = 0,
+  pt.size = 1
+)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/chicken_Top2a.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p
+
+```
+
+
+```{r}
+FeaturePlot(chicken_integrated_dcn_granule_plot_sub, features = "UNC5C")
+```
+
+```{r}
+library(dplyr)
+
+# Example: combine clusters 2 and 5 into "2_5"
+new_clusters <- as.character(Idents(chicken_integrated_dcn_granule))
+
+
+# Assign back to Seurat object
+DimPlot(chicken_integrated_dcn_granule, group.by = "cell_type_general")
+FeaturePlot(chicken_integrated_dcn_granule, features = c("MEIS2", "ZFHX3", "LMX1A", "RELN", "EOMES"), max.cutoff = 5, min.cutoff = 0)
+
+```
+
+
+
+
+```{r}
+
+chicken_integrated_dcn_granule_plot_sub = subset(chicken_integrated_dcn_granule, cell_type_ref_chicken %in% c("Midbrain-fated Cells",
+  "IntP", 
+  "Early Medial", "Late Medial", 
+  "Granule Cells+UBCs"))
+
+chicken_integrated_dcn_granule_plot_sub.emb <- Embeddings(chicken_integrated_dcn_granule_plot_sub, "pca")[, 1:30]  # use first 10 PCs
+
+# Get centroids of each endpoint cell type in PC space
+A.idx <- which(chicken_integrated_dcn_granule_plot_sub$cell_type_ref_chicken == "Midbrain-fated Cells")
+B.idx <- which(chicken_integrated_dcn_granule_plot_sub$cell_type_ref_chicken == "Granule Cells+UBCs")
+
+A.centroid <- colMeans(chicken_integrated_dcn_granule_plot_sub.emb[A.idx, , drop = FALSE])
+B.centroid <- colMeans(chicken_integrated_dcn_granule_plot_sub.emb[B.idx, , drop = FALSE])
+
+# Direction vector from A to B in PC space
+axis_vec <- B.centroid - A.centroid
+
+# Normalize to unit length
+axis_vec <- axis_vec / sqrt(sum(axis_vec^2))
+
+# For each cell, subtract A and take dot product with axis_vec
+# This gives a scalar coordinate along the A→B axis
+proj_vals <- as.numeric((t(t(chicken_integrated_dcn_granule_plot_sub.emb) - A.centroid) %*% axis_vec))
+
+# Optionally rescale 0–1 based on A and B positions
+A_coord <- sum((A.centroid - A.centroid) * axis_vec)       # should be 0
+B_coord <- sum((B.centroid - A.centroid) * axis_vec)
+proj_vals_scaled <- (proj_vals - A_coord) / (B_coord - A_coord)
+
+# Store in meta.data
+chicken_integrated_dcn_granule_plot_sub$axis_AB <- proj_vals_scaled
+```
+
+
+```{r}
+df <- data.frame(
+  axis_AB  = chicken_integrated_dcn_granule_plot_sub$axis_AB,
+  celltype = chicken_integrated_dcn_granule_plot_sub$cell_type_ref_chicken
+)
+
+# Evolutionary timeline (0=ancient → 6=newest) - SAME AS BEFORE
+df$evo_age <- case_when(
+  df$celltype %in% c("Midbrain-fated Cells", "Granule Cells+UBCs") ~ 0,    
+  df$celltype == "Early Medial" ~ 3,                                               
+  df$celltype == "Late Medial" ~ 2,                                                 
+  df$celltype == "IntP" ~ 5,                                                
+  #df$celltype == "inta/lat" ~ 6,                                            
+  #df$celltype == "int prog" ~ 4,                                        
+  TRUE ~ 0
+)
+
+
+# Choose your specific order (example – edit as you like)
+my_order <- c(
+  "Midbrain-fated Cells",
+  "IntP", 
+  "Early Medial", "Late Medial", 
+  "Granule Cells+UBCs"
+)
+
+# Apply ordering (and drop unused levels)
+df$celltype <- factor(df$celltype, levels = my_order)
+df$celltype <- droplevels(df$celltype)
+
+# Recompute means with ordered factor
+mean_lines <- aggregate(axis_AB ~ celltype, df, mean)
+
+mean_lines <- aggregate(axis_AB ~ celltype, df, mean)
+mean_lines$evo_age <- df$evo_age[match(mean_lines$celltype, df$celltype)]
+
+library(ggplot2)
+library(ggridges)
+
+ggplot(df, aes(x = axis_AB, y = celltype, fill = evo_age)) +
+  geom_density_ridges(scale = 2, alpha = 0.7, rel_min_height = 0.01) +
+  geom_segment(
+    data = mean_lines,
+    aes(x = axis_AB, xend = axis_AB, y = 0, yend = Inf, color = evo_age),  # Now evo_age exists!
+    linetype = "dashed",
+    linewidth = 1,
+    alpha = 0.6,
+    inherit.aes = FALSE
+  ) +
+  scale_fill_gradientn(
+    colors = c("black", "grey", "lightpink", "salmon", "red", "red3", "darkred"),
+    name = "Evo Age"
+  ) +
+  scale_color_gradientn(
+    colors = c("black", "grey", "lightpink", "salmon", "red", "red3", "darkred"),
+    name = "Evo Age"
+  ) +
+  xlim(-1, 1.5) +
+  labs(x = "Projection onto A–B PC axis", y = "Cell type") +
+  theme_classic() +
+  theme(legend.position = "none")
+
+
+```
+
+```{r}
+# Get PCA loadings matrix (genes x PCs)
+pca_loadings <- Loadings(chicken_integrated_dcn_granule_plot_sub[["pca"]])
+
+# Keep only the PCs you used for axis_vec (PCs 1:50)
+pcs_used <- paste0("PC_", 1:30)
+pcs_keep <- intersect(pcs_used, colnames(pca_loadings))
+pca_loadings_subset <- pca_loadings[, pcs_keep]
+
+# Project each gene's loadings onto your axis_vec
+# This gives the "loading" of each gene specifically on the A→B axis
+gene_axis_loadings <- as.numeric(pca_loadings_subset %*% axis_vec)
+
+# Create ranked table
+gene_axis_df <- data.frame(
+  gene = rownames(pca_loadings_subset),
+  axis_loading = gene_axis_loadings
+)
+
+# Rank by absolute loading (most influential on A→B axis)
+gene_axis_df <- gene_axis_df[order(abs(gene_axis_df$axis_loading), decreasing = TRUE), ]
+
+# Top 20 positive and negative
+top_genes <- head(gene_axis_df, 30)$gene # highest positive contributors to A→B direction
+head(gene_axis_df, 30)
+tail(head(gene_axis_df, 40), 20)  # highest negative contributors
+
+```
+```{r}
+library(dplyr)
+
+# 1. Order cell types by mean axis_AB (A→B gradient)
+celltype_means <- aggregate(chicken_integrated_dcn_granule_plot_sub$axis_AB, by = list(chicken_integrated_dcn_granule_plot_sub$cell_type_ref_chicken), mean)
+celltype_order <- celltype_means$Group.1[order(celltype_means$x)]
+
+# 2. Get ALL cells ordered by axis_AB within each cell type (FIXED SYNTAX)
+cells_ordered <- chicken_integrated_dcn_granule_plot_sub@meta.data %>%
+  arrange(cell_type_ref_chicken, axis_AB) %>%
+  rownames()
+
+# 3. Subset object with cells in gradient order
+chicken_integrated_dcn_granule_plot_sub <- chicken_integrated_dcn_granule_plot_sub[, cells_ordered]
+
+# 4. Filter genes: expressed in ≥25% of cells AND mean > 0.1
+top_50 <- head(gene_axis_df, 30)
+expr_data <- chicken_integrated_dcn_granule_plot_sub[top_50$gene, ]
+#pct_expr <- rowSums(expr_data > 0) / ncol(expr_data)
+#mean_expr <- rowMeans(as.matrix(expr_data))
+
+top_filtered <- top_50[pct_expr[top_50$gene] >= 0.25 & mean_expr[top_50$gene] > 0.1, ]
+
+# 5. Split into pos/neg and order
+top_pos <- top_filtered$gene[top_filtered$axis_loading > 0]
+top_neg <- top_filtered$gene[top_filtered$axis_loading < 0]
+spectrum_genes <- c(top_pos, rev(top_neg))
+```
+
+
+```{r}
+# 6. Set cell type order
+Idents(chicken_integrated_dcn_granule_plot_sub) <- factor(chicken_integrated_dcn_granule_plot_sub$cell_type_ref_chicken, levels = celltype_order)
+selected_genes <- c("Carnmt1", "Unc5c", "Igfbp5", "Fam212b", "Btbd11", "Gamt", "Rbfox1", "Scn3a", "Rmst", "Meis2", "Nkain3", "Hist3h2ba", "Negr1")
+# 7. Perfect gradient heatmap
+DotPlot(
+  chicken_integrated_dcn_granule_plot_sub,
+  features = top_50$gene,
+  assay = "RNA",
+  dot.min = 0,
+  col.min = -5,
+  col.max = 5,
+  #slot = "scale.data"
+) + 
+  scale_fill_gradient2(low = "yellow", mid = "yellow", high = "purple", midpoint = 0) +
+  RotatedAxis() +
+  #NoLegend() +
+  theme(
+    #axis.text.x = element_blank(),
+    axis.text.y = element_text(size = 9),
+    #axis.ticks.x = element_blank()
+  ) +
+  labs(title = "Top 50 axis genes")
+```
+
+```{r}
+DimPlot(chicken_integrated_dcn_granule_sub, group.by = "cell_type")
+```
+
+
+```{r}
+############################################
+## 0. Packages
+############################################
+library(Seurat)
+library(MetaNeighbor)
+library(homologene)
+library(SummarizedExperiment)
+library(Matrix)
+
+############################################
+## 1. Extract expression matrices (Seurat v5)
+############################################
+# Use normalized RNA data (NOT scaled)
+############################################
+chicken_integrated_dcn_granule_sub <- subset(
+  chicken_integrated_dcn_granule, 
+  !(cell_type %in% c("Midbrain-fated Cells", "Granule Cells+UBCs"))
+)
+
+chicken_expr <- GetAssayData(
+  chicken_integrated_dcn_granule_sub,
+  slot = "data"
+)
+
+############################################
+## 2. Cluster identities
+############################################
+chicken_clusters <- chicken_integrated_dcn_granule_sub$cell_type
+
+mouse_data_sub <- subset(
+  combined_alltp,
+  subset = !(med_2p_branch %in% c("RL", "Med", "Int/Lat Prog", "IntA", "Lat"))
+)
+
+mouse_data_sub <- subset(
+  mouse_data_sub,
+  TimePoint %in%  c("E13.5")
+)
+
+mouse_clusters   <- mouse_data_sub$med_2p_branch#Idents(mouse_data)
+
+mouse_expr <- GetAssayData(
+  mouse_data_sub,
+  layer = "data",
+  assay = "RNA"
+)
+DefaultAssay(mouse_data_sub) <- "SCT"
+#mouse_data_sub <- PrepSCTFindMarkers(mouse_data_sub)
+
+genes <- FindAllMarkers(
+  mouse_data_sub,
+  assay   = "SCT",
+  group.by = "med_2p_branch"
+)
+
+############################################
+## 3. Chicken → Mouse orthologs (NO BioMart)
+############################################
+# Taxonomy IDs:
+# Chicken = 9031
+# Mouse   = 10090
+orthologs <- homologene(
+  genes  = rownames(chicken_expr),
+  inTax  = 9031,
+  outTax = 10090
+)
+
+orthologs <- orthologs[, c("9031", "10090")]
+colnames(orthologs) <- c("chicken_gene", "mouse_gene")
+
+# Keep strict 1-to-1 orthologs
+orthologs <- orthologs[
+  !duplicated(orthologs$chicken_gene) &
+  !duplicated(orthologs$mouse_gene),
+]
+
+############################################
+## 4. Map chicken expression → mouse genes
+############################################
+common_chicken <- intersect(
+  rownames(chicken_expr),
+  orthologs$chicken_gene
+)
+
+gene_map <- orthologs[
+  match(common_chicken, orthologs$chicken_gene),
+]
+
+chicken_mapped <- chicken_expr[common_chicken, ]
+rownames(chicken_mapped) <- gene_map$mouse_gene
+
+
+# 1. Define the cluster source (pick one)
+# If you use Idents:
+mouse_cluster_vec = mouse_data_sub$med_2p_branch#Idents(mouse_data)
+# OR if you use a metadata column:
+# mouse_cluster_vec <- mouse_data_sub$your_cluster_column
+
+# 2. Align cluster labels to mouse_expr columns
+mouse_clusters <- mouse_cluster_vec[ colnames(mouse_expr) ]
+length(mouse_clusters)  # should now be 7184
+# Assuming chicken_seurat is your chicken Seurat object
+# and chicken_expr was derived from it:
+chicken_cluster_vec <- chicken_integrated_dcn_granule_sub$cell_type  # or Idents(chicken_seurat)
+chicken_clusters <- chicken_cluster_vec[ colnames(chicken_expr) ]
+length(chicken_clusters)  # should be 1380
+
+############################################
+## 5. Align genes across species
+############################################
+shared_genes <- intersect(
+  rownames(mouse_expr),
+  rownames(chicken_mapped)
+)
+
+mouse_expr   <- mouse_expr[shared_genes, ]
+chicken_expr <- chicken_mapped[shared_genes, ]
+
+############################################
+## 6. Combine expression matrices
+############################################
+expr_all <- cbind(mouse_expr, chicken_expr)
+
+############################################
+## 7. MetaNeighbor metadata
+############################################
+cell_metadata <- data.frame(
+  cell_id = colnames(expr_all),
+  species = c(
+    rep("mouse", ncol(mouse_expr)),
+    rep("chicken", ncol(chicken_expr))
+  ),
+  cluster = c(
+    as.character(mouse_clusters),
+    as.character(chicken_clusters)
+  )
+)
+
+
+rownames(cell_metadata) <- cell_metadata$cell_id
+
+############################################
+## 8. Gene set (recommended: mouse HVGs)
+############################################
+geneset <- intersect(
+  VariableFeatures(mouse_data_sub),
+  rownames(expr_all)
+)
+
+
+geneset_idx <- which(rownames(expr_all) %in% geneset)
+
+############################################
+## 9. Wrap expression in SummarizedExperiment
+############################################
+# This avoids the MetaNeighbor dgCMatrix assay() bug
+se <- SummarizedExperiment(
+  assays = list(expr = expr_all)
+)
+
+############################################
+## 10. Run MetaNeighbor (THIS WORKS)
+############################################
+############################################
+## 8. Gene set FIX: use all shared genes
+############################################
+geneset_idx <- seq_len(nrow(expr_all))
+
+mn <- MetaNeighborUS(
+  var_genes = geneset,
+  dat = se,
+  study_id = cell_metadata$species,
+  cell_type = cell_metadata$cluster,
+  fast_version = TRUE
+)
+
+############################################
+## 11. Mouse ↔ Chicken AUROC matrix
+############################################
+# Full AUROC matrix
+auroc <- mn
+
+# Identify mouse and chicken rows/cols by name
+mouse_rows    <- grep("^mouse\\|", rownames(auroc), value = TRUE)
+chicken_cols  <- grep("^chicken\\|", colnames(auroc), value = TRUE)
+
+mouse_vs_chicken <- auroc[mouse_rows, chicken_cols]
+
+############################################
+## 12. Plot
+############################################
+library(pheatmap)
+
+library(pheatmap)
+library(grid)
+library(gridExtra)
+
+# Set global font to Arial (important for pheatmap/grid graphics)
+windowsFonts(Arial = windowsFont("Arial"))  # Windows only
+# On macOS/Linux use: quartzFonts or cairo (see below)
+
+# Open SVG device
+svg("C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/MetaNeighbor_AUROC_heatmap.svg", width = 7, height = 6)
+
+pheatmap(
+  mouse_vs_chicken,
+  color = colorRampPalette(c("white", "red"))(100),
+  breaks = seq(0.5, 1, length.out = 101),
+  display_numbers = TRUE,
+  number_format = "%.2f",
+  main = "MetaNeighbor AUROC: Adult vs Chick (by chance = 0.5)",
+  fontsize = 12,
+  fontsize_number = 8,
+  fontsize_row = 10,
+  fontsize_col = 10,
+  family = "Arial"
+)
+
+dev.off()
+
+
+```
+
+```{r}
+pheatmap(
+  mouse_vs_chicken,
+  color = colorRampPalette(c("white", "red"))(100),
+  breaks = seq(0.5, 1, length.out = 101),
+  display_numbers = TRUE,
+  number_format = "%.2f",
+  main = "MetaNeighbor AUROC: Adult vs Chick (by chance = 0.5)",
+  fontsize = 12,
+  fontsize_number = 8,
+  fontsize_row = 10,
+  fontsize_col = 10,
+  family = "Arial"
+)
+```
+
+
+
+
+```{r}
+load("C:/Users/kebsc/Downloads/GSE160471_RAW/GSM4873765_mouse_data.RData/GSM4873765_mouse_data.RData")
+rm(VZ)
+RL <- UpdateSeuratObject(RL)
+```
+
+
+```{r}
+############################################
+## 0. Packages
+############################################
+library(Seurat)
+library(MetaNeighbor)
+library(homologene)
+library(SummarizedExperiment)
+library(Matrix)
+
+############################################
+## 1. Extract expression matrices (Seurat v5)
+############################################
+# Use normalized RNA data (NOT scaled)
+############################################
+
+
+ #GetAssayData(
+#  ex,
+#  layer = "data"
+#)
+
+############################################
+## 2. Cluster identities
+############################################
+mouse_data_sub <- subset(
+  mouse_data,
+  subset = !(med_2p_branch %in% c("RL", "Med", "IntA/Lat", "Int/Lat Prog"))
+)
+mouse_data_sub = subset(mouse_data_sub, subset = TimePoint %in% c("E14.5", 'E16.5'))
+
+# Option 1: rename levels in place
+
+mouse_data_sub = subset(mouse_data_sub, subset = (med_2p_branch %in% c("Early Medial", 'Late Medial')))
+
+mouse_expr <- mouse_data_sub@assays$RNA$data
+
+
+mouse_clusters <- mouse_data_sub$med_2p_branch
+
+# Save back
+RL_sub <- subset(RL, subset = (subareas %in% c("Med", "MedDL", "MedL")))
+
+RL_clusters   <- RL_sub$subareas#cluster_simple_intp #Idents(mouse_data)
+
+RL_expr <- RL_sub@assays$RNA$data
+############################################
+## 5. Align genes across species
+############################################
+shared_genes <- intersect(
+  rownames(mouse_expr),
+  rownames(RL_expr)
+)
+
+RL_expr   <- RL_expr[shared_genes, ]
+# 1. Extract expression matrix for shared genes
+mouse_expr <- mouse_expr[shared_genes, ]
+
+# 2. Extract cluster labels
+
+
+############################################
+## 6. Combine expression matrices
+############################################
+expr_all <- cbind(RL_expr, mouse_expr)
+
+############################################
+## 7. MetaNeighbor metadata
+############################################
+cell_metadata <- data.frame(
+  cell_id = colnames(expr_all),
+  species = c(
+    rep("adult", ncol(RL_expr)),
+    rep("mouse", ncol(mouse_expr))
+  ),
+  cluster = c(
+    as.character(RL_clusters),
+    as.character(mouse_clusters)
+  )
+)
+
+
+rownames(cell_metadata) <- cell_metadata$cell_id
+
+############################################
+## 8. Gene set (recommended: mouse HVGs)
+############################################
+geneset <- intersect(
+  FindAllMarkers(RL_sub, group.by = "final.clusters2")$gene,
+  rownames(mouse_data_sub)
+)
+
+
+geneset_idx <- which(rownames(expr_all) %in% geneset)
+
+############################################
+## 9. Wrap expression in SummarizedExperiment
+############################################
+# This avoids the MetaNeighbor dgCMatrix assay() bug
+se <- SummarizedExperiment(
+  assays = list(expr = expr_all)
+)
+
+############################################
+## 10. Run MetaNeighbor (THIS WORKS)
+############################################
+############################################
+## 8. Gene set FIX: use all shared genes
+############################################
+geneset_idx <- seq_len(nrow(expr_all))
+
+mn <- MetaNeighborUS(
+  var_genes = geneset,
+  dat = se,
+  study_id = cell_metadata$species,
+  cell_type = cell_metadata$cluster,
+  fast_version = TRUE
+)
+
+############################################
+## 11. Mouse ↔ Chicken AUROC matrix
+############################################
+# Full AUROC matrix
+auroc <- mn
+
+# Identify mouse and chicken rows/cols by name
+ex_rows    <- grep("^adult\\|", rownames(auroc), value = TRUE)
+chicken_cols  <- grep("^mouse\\|", colnames(auroc), value = TRUE)
+
+ex_vs_chicken <- auroc[ex_rows, chicken_cols]
+
+
+
+
+
+
+############################################
+## 12. Plot
+############################################
+library(pheatmap)
+
+pheatmap(
+  ex_vs_chicken,
+  color = colorRampPalette(c("white", "red"))(100),
+  breaks = seq(0.5, 1, length.out = 101),
+  dendrogram = FALSE,
+  display_numbers = TRUE,         # Show numbers on each cell
+  number_format = "%.2f",         # 2 decimal places
+  main = "MetaNeighbor AUROC: Adult vs Chick (by chance = 0.5)"
+)
+
+
+```
+```{r}
+library(ComplexHeatmap)
+library(circlize)
+library(svglite)
+
+svglite("C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/MetaNeighbor_AUROC_Adult_vs_embryo_med.svg", width = 7, height = 6)
+
+Heatmap(
+  ex_vs_chicken,
+  name = "AUROC",
+  col = colorRamp2(
+    c(0.5, 0.75, 1),
+    c("white", "red", "red")
+  ),
+
+  cluster_rows = FALSE,
+  cluster_columns = FALSE,
+
+  rect_gp = grid::gpar(col = "white", lwd = 1),
+
+  cell_fun = function(j, i, x, y, width, height, fill) {
+    grid::grid.text(
+      sprintf("%.2f", ex_vs_chicken[i, j]),
+      x, y, 
+      gp = grid::gpar(fontsize = 8)
+    )
+  },
+
+  row_names_gp = grid::gpar(fontsize = 11),
+  column_names_gp = grid::gpar(fontsize = 11),
+  column_names_rot = 45,
+
+  column_title = "Adult vs Chick MetaNeighbor AUROC"
+)
+
+dev.off()
+```
+
+
+```{r}
+DimPlot(mouse_data_sub, group.by = "med_2p_branch")
+DimPlot(chicken_integrated_dcn_granule_sub, group.by = "ident")
+DimPlot(chicken_integrated_dcn_granule_sub, group.by = "collector")
+DimPlot(chicken_integrated_dcn_granule_sub, group.by = "sample")
+
+```
+
+
+```{r}
+FeaturePlot(chicken_integrated_dcn_granule_sub, features = "CRABP1", max.cutoff = 6, min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn_granule_sub, features = "CRABP2", max.cutoff = 6, min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn_granule_sub, features = "NR2F2", max.cutoff = 6, min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn_granule_sub, features = "NR2F1", max.cutoff = 6, min.cutoff = 0)
+
+FeaturePlot(chicken_integrated_dcn_granule_sub, features = "NFIB", max.cutoff = 6, min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn_granule_sub, features = "NFIA", max.cutoff = 6, min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn_granule_sub, features = "CDHR1")
+FeaturePlot(chicken_integrated_dcn_granule_sub, features = "OLIG2")
+```
+```{r}
+DimPlot(ex, group.by = 'cluster_simple')
+FeaturePlot(ex, features = "NTNG1")
+FeaturePlot(ex, features = "NFIB", max.cutoff = 6)
+
+```
+```{r}
+
+ex$cluster_simple <- sub("\\..*$", "", ex$merged.res.3.m.renamed)
+intp <- subset(ex, subset = cluster_simple == "IntP")
+intp <- FindClusters(intp, resolution = 0.3)
+DimPlot(intp)
+```
+
+
+```{r}
+ex$cluster_simple_sub <- ex$cluster_simple
+ex$cluster_simple_sub[colnames(intp)] <- as.character(Idents(intp))
+ex$cluster_simple_intp <- ex$cluster_simple_sub
+ex$cluster_simple_sub <- NULL
+table(ex$cluster_simple_intp)
+DimPlot(ex, group.by = "cluster_simple_intp", label = TRUE)
+
+
+```
+
+
+```{r}
+#load("C:/Users/kebsc/Downloads/GSE160471_RAW/GSM4873767_chicken_data.RData/GSM4873767_chicken_data.RData")
+#rm(inh)
+#ex <- UpdateSeuratObject(ex)
+
+load("C:/Users/kebsc/Downloads/GSE160471_RAW/GSM4873765_mouse_data.RData/GSM4873765_mouse_data.RData")
+rm(VZ)
+RL <- UpdateSeuratObject(RL)
+
+############################################
+## 0. Packages
+############################################
+library(Seurat)
+library(MetaNeighbor)
+library(homologene)
+library(SummarizedExperiment)
+library(Matrix)
+
+############################################
+## 1. Extract expression matrices (Seurat v5)
+############################################
+# Use normalized RNA data (NOT scaled)
+############################################
+chicken_expr <- GetAssayData(
+  ex,
+  slot = "data"
+)
+
+mouse_expr <- GetAssayData(
+  RL,
+  layer = "data"
+)
+
+############################################
+## 2. Cluster identities
+############################################
+
+chicken_clusters   <- ex$cluster_simple #Idents(mouse_data)
+
+mouse_clusters   <- RL$subareas  #Idents(mouse_data)
+
+############################################
+## 3. Chicken → Mouse orthologs (NO BioMart)
+############################################
+# Taxonomy IDs:
+# Chicken = 9031
+# Mouse   = 10090
+orthologs <- homologene(
+  genes  = rownames(chicken_expr),
+  inTax  = 9031,
+  outTax = 10090
+)
+
+orthologs <- orthologs[, c("9031", "10090")]
+colnames(orthologs) <- c("chicken_gene", "mouse_gene")
+
+# Keep strict 1-to-1 orthologs
+orthologs <- orthologs[
+  !duplicated(orthologs$chicken_gene) &
+  !duplicated(orthologs$mouse_gene),
+]
+
+############################################
+## 4. Map chicken expression → mouse genes
+############################################
+common_chicken <- intersect(
+  rownames(chicken_expr),
+  orthologs$chicken_gene
+)
+
+gene_map <- orthologs[
+  match(common_chicken, orthologs$chicken_gene),
+]
+
+chicken_mapped <- chicken_expr[common_chicken, ]
+rownames(chicken_mapped) <- gene_map$mouse_gene
+
+############################################
+## 5. Align genes across species
+############################################
+shared_genes <- intersect(
+  rownames(mouse_expr),
+  rownames(chicken_mapped)
+)
+
+mouse_expr   <- mouse_expr[shared_genes, ]
+chicken_expr <- chicken_mapped[shared_genes, ]
+
+############################################
+## 6. Combine expression matrices
+############################################
+expr_all <- cbind(mouse_expr, chicken_expr)
+
+############################################
+## 7. MetaNeighbor metadata
+############################################
+cell_metadata <- data.frame(
+  cell_id = colnames(expr_all),
+  species = c(
+    rep("mouse", ncol(mouse_expr)),
+    rep("chicken", ncol(chicken_expr))
+  ),
+  cluster = c(
+    as.character(mouse_clusters),
+    as.character(chicken_clusters)
+  )
+)
+
+rownames(cell_metadata) <- cell_metadata$cell_id
+
+############################################
+## 8. Gene set (recommended: mouse HVGs)
+############################################
+
+
+geneset <- intersect(
+  rownames(expr_all),
+  #VariableFeatures(RL),
+  rownames(expr_all)
+)
+
+
+geneset_idx <- which(rownames(expr_all) %in% geneset)
+
+############################################
+## 9. Wrap expression in SummarizedExperiment
+############################################
+# This avoids the MetaNeighbor dgCMatrix assay() bug
+se <- SummarizedExperiment(
+  assays = list(expr = expr_all)
+)
+
+############################################
+## 10. Run MetaNeighbor (THIS WORKS)
+############################################
+############################################
+## 8. Gene set FIX: use all shared genes
+############################################
+geneset_idx <- seq_len(nrow(expr_all))
+
+mn <- MetaNeighborUS(
+  var_genes = geneset,
+  dat = se,
+  study_id = cell_metadata$species,
+  cell_type = cell_metadata$cluster,
+  fast_version = TRUE
+)
+
+############################################
+## 11. Mouse ↔ Chicken AUROC matrix
+############################################
+# Full AUROC matrix
+auroc <- mn
+
+# Identify mouse and chicken rows/cols by name
+mouse_rows    <- grep("^mouse\\|", rownames(auroc), value = TRUE)
+chicken_cols  <- grep("^chicken\\|", colnames(auroc), value = TRUE)
+
+mouse_vs_chicken <- auroc[mouse_rows, chicken_cols]
+
+
+
+
+
+
+############################################
+## 12. Plot
+############################################
+
+
+pheatmap(
+  mouse_vs_chicken,
+  color = colorRampPalette(c("white", "red"))(100),
+  breaks = seq(0.5, 1, length.out = 101),
+  display_numbers = TRUE,         # Show numbers on each cell
+  number_format = "%.2f",         # 2 decimal places
+  main = "MetaNeighbor AUROC: Adult vs Chick (by chance = 0.5)"
+)
+
+
+```
+
+
+```{r}
+DefaultAssay(chicken_integrated_dcn_granule_sub) <- "RNA"
+
+all_markers <- FindAllMarkers(
+  chicken_integrated_dcn_granule_sub,
+  only.pos = TRUE,
+  min.pct = 0.25,
+  logfc.threshold = 0.25
+)
+library(dplyr)
+chicken_integrated_dcn_granule_sub <- JoinLayers(chicken_integrated_dcn_granule_sub)
+top_markers <- all_markers %>%
+  group_by(cluster) %>%
+  slice_max(order_by = avg_log2FC, n = 10)
+
+DoHeatmap(
+  chicken_integrated_dcn_granule_sub,
+  features = unique(top_markers$gene),
+  group.by = "ident"
+) +
+  NoLegend()
+
+
+```
+
+
+```{r}
+library(Seurat)
+library(dplyr)
+
+## 1. Load and clean ortholog table
+# orthos <- read.csv("mouse_chicken_1to1_orthologs.csv")  # if not already in memory
+orthos_df <- orthos_df %>%
+  distinct(mouse_gene, chicken_gene)
+
+# Keep only orthologs actually present in each object
+mouse_present   <- intersect(orthos_df$mouse_gene,   rownames(mouse_data))
+chicken_present <- intersect(orthos_df$chicken_gene, rownames(chicken_integrated_dcn_granule_sub))
+
+orthos_sub <- orthos_df %>%
+  filter(mouse_gene %in% mouse_present,
+         chicken_gene %in% chicken_present) %>%
+  arrange(mouse_gene)
+
+mouse_genes   <- orthos_sub$mouse_gene
+chicken_genes <- orthos_sub$chicken_gene
+
+## 2. Subset each Seurat object to ortholog genes
+mouse_ortho <- subset(mouse_data,   features = mouse_genes)
+chick_ortho <- subset(chicken_integrated_dcn_granule_sub, features = chicken_genes)
+```
+
+
+```{r}
+DefaultAssay(chick_ortho) <- "RNA"
+chick_ortho <- JoinLayers(chick_ortho)
+counts <- GetAssayData(
+  chick_ortho,
+  assay = "RNA",
+  layer = "counts"
+)
+
+## 2. Transform gene names: lowercase + capitalize first letter
+new_names <- rownames(counts)
+new_names <- tolower(new_names)
+new_names <- paste0(
+  toupper(substr(new_names, 1, 1)),
+  substr(new_names, 2, nchar(new_names))
+)
+
+rownames(counts) <- new_names
+
+## 3. Rebuild RNA assay cleanly
+chick_ortho[["RNA"]] <- CreateAssayObject(counts = counts)
+DefaultAssay(chick_ortho) <- "RNA"
+
+## 4. Reprocess
+chick_ortho <- NormalizeData(chick_ortho)
+chick_ortho <- FindVariableFeatures(chick_ortho)
+chick_ortho <- ScaleData(chick_ortho)
+```
+
+
+
+
+
+
+```{r}
+mouse_ortho_e1234 = subset(mouse_ortho, TimePoint %in% c("E13.5", 'E14.5'))
+DefaultAssay(mouse_ortho_e1234) <- "RNA"
+
+# Extract counts
+mouse_counts <- GetAssayData(
+  mouse_ortho_e1234,
+  assay = "RNA",
+  layer = "counts.1")
+
+# Rebuild RNA assay
+mouse_ortho_e1234[["RNA"]] <- CreateAssayObject(counts = mouse_counts)
+
+DefaultAssay(mouse_ortho_e1234) <- "RNA"
+
+set.seed(123)  # reproducibility
+
+# Number of chicken cells
+n_chick <- ncol(chick_ortho)
+
+# Randomly sample mouse cell names
+mouse_cells_sub <- sample(
+  colnames(mouse_ortho_e1234),
+  size = n_chick*2,
+  replace = FALSE
+)
+
+# Subset mouse object
+mouse_ortho_e1234_sub <- subset(
+  mouse_ortho_e1234,
+  cells = mouse_cells_sub
+)
+
+```
+
+
+
+```{r}
+common_features <- intersect(rownames(mouse_ortho_e1234_sub), rownames(chick_ortho))
+
+mouse_ortho_e1234_sub <- subset(mouse_ortho_e1234_sub, features = common_features)
+chick_ortho <- subset(chick_ortho, features = common_features)
+
+mouse_ortho_e1234_sub <- SCTransform(mouse_ortho_e1234_sub)
+chick_ortho <- SCTransform(chick_ortho)
+```
+
+
+```{r}
+DefaultAssay(mouse_ortho_e1234_sub) <- "SCT"
+DefaultAssay(chick_ortho) <- "SCT"
+
+chick_ortho$species <- "chicken"
+mouse_ortho_e1234_sub$species <- "mouse"
+
+combined <- list(mouse_ortho_e1234_sub, chick_ortho)
+
+features_use <- SelectIntegrationFeatures(object.list = combined)
+
+combined <- PrepSCTIntegration(combined, assay = "SCT", anchor.features = features_use)
+combined <- lapply(X = combined, FUN = RunPCA, features = features_use)
+```
+
+
+```{r}
+
+
+anchors <- FindIntegrationAnchors(
+  object.list     = combined,
+  anchor.features = features_use,
+  reduction = "cca",
+  normalization.method = "SCT",
+  dims = 1:50)
+
+integrated <- IntegrateData(anchorset = anchors, normalization.method = "SCT", dims = 1:50)
+
+## 5. Downstream dimensionality reduction and clustering
+DefaultAssay(integrated) <- "integrated"
+```
+
+
+
+```{r}
+integrated <- RunPCA(integrated, npcs = 50, verbose = FALSE)
+
+integrated <- RunUMAP(integrated,dims = 1:20)
+```
+
+```{r}
+DimPlot(integrated, reduction = "umap", group.by = "species")
+DimPlot(integrated, reduction = "umap", group.by = "med_2p_branch")
+DimPlot(integrated, reduction = "umap", group.by = "TimePoint")
+DimPlot(integrated, reduction = "umap", group.by = "cellType")
+DimPlot(integrated, reduction = "umap", group.by = "cell_type_vague")
+DimPlot(integrated, reduction = "umap", group.by = "branch")
+DimPlot(integrated, reduction = "umap", group.by = "ident", label = TRUE)
+```
+
+
+```{r}
+FeaturePlot(integrated, reduction = "umap", features = "Lmx1a", max.cutoff = 5)
+FeaturePlot(integrated, reduction = "umap", features = "Robo3", max.cutoff = 5)
+FeaturePlot(integrated, reduction = "umap", features = "Lhx9", max.cutoff = 5)
+#FeaturePlot(integrated, reduction = "umap", features = "Irx5", max.cutoff = 5)
+FeaturePlot(integrated, reduction = "umap", features = "Robo2", max.cutoff = 5)
+
+```
+
+```{r}
+chick_ortho <- RunPCA(chick_ortho, npcs = 200)
+mouse_ortho_e1234_sub <- RunPCA(mouse_ortho_e1234_sub, npcs = 200)
+```
+
+
+```{r}
+query <- chick_ortho#SplitObject(integrated, "species")$chicken
+#query = RunPCA(query)
+ref <- mouse_ortho_e1234_sub#SplitObject(integrated, "species")$mouse
+
+pb_anchors_minh <- FindTransferAnchors(query = query, reference = ref,reference.reduction = 'pca', dims = 1:30)
+predictions <- TransferData(anchorset = pb_anchors_minh, refdata = ref$med_2p_branch, dims = 1:20)
+query <- AddMetaData(query, metadata = predictions)
+head(table(query$seurat_clusters,query$predicted.id))
+query <- RunUMAP(query, dims = 1:20, reduction = "pca", return.model = TRUE)
+query <- MapQuery(anchorset = pb_anchors_minh, reference = ref, query = query, refdata = list(celltype = "med_2p_branch"),reduction.model = "umap")
+p1 <- DimPlot(ref, reduction = "umap", group.by = "med_2p_branch", label = TRUE, label.size = 3, repel = TRUE) + ggtitle("Reference Mouse Annotations")+NoLegend()+ coord_equal(xlim = range(-11,6), ylim = range(-3,5))
+p2 <- DimPlot(query, reduction = "ref.umap", group.by = "predicted.celltype", label = TRUE, label.size = 3, repel = TRUE) + ggtitle("Predicted Chicken Cell Types for Mouse Cells")+NoLegend() + coord_equal(xlim = range(-11,6), ylim = range(-3,5))
+p1+p2
+```
+
+
+
+```{r}
+#chicken_integrated <- FindClusters(chicken_integrated, resolution = 1)
+chicken_integrated <- RunUMAP(chicken_integrated, dims = 1:20) 
+
+# Step 8. Visualization
+DimPlot(chicken_integrated, group.by = "collector", label = TRUE, shuffle = TRUE) + ggtitle("RPCA Integrated by Collector")
+DimPlot(chicken_integrated, group.by = "seurat_clusters", label = TRUE, shuffle = TRUE) + ggtitle("Clusters after RPCA Integration")
+
+
+```
+
+
+
+
+
+
+
+```{r}
+DimPlot(chicken_integrated, reduction = "umap", group.by = "collector")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "LMX1A")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "IRX5")
+
+FeaturePlot(chicken_integrated, reduction = "umap", features = "LHX9")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "RELN")
+
+FeaturePlot(chicken_integrated, reduction = "umap", features = "PAX6")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "ROBO3")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "OLIG2")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "Atoh1")
+
+FeaturePlot(chicken_integrated, reduction = "umap", features = "MEIS2")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "MEIS1")
+
+FeaturePlot(chicken_integrated, reduction = "umap", features = "ZFHX3")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "SLC17A6")
+
+FeaturePlot(chicken_integrated, reduction = "umap", features = "GAD1")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "RELN")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "PAX2")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "FOXP2")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "SOX14")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "SOX14")
+```
+
+
+```{r}
+FeaturePlot(chicken_integrated, reduction = "umap", features = "SOX2")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "SLIT2")
+
+```
+
+
+```{r}
+FeaturePlot(chicken_integrated, reduction = "umap", features = "nCount_RNA", max.cutoff = 15000)
+
+```
+
+
+
+```{r}
+FeaturePlot(chicken_integrated, reduction = "umap", features = "IRX3")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "POU3F2")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "IRX5")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "NTNG1")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+
+chicken_integrated <- FindClusters(chicken_integrated, resolution = 0.1) 
+
+```
+```{r}
+FeaturePlot(chicken_integrated, reduction = "umap", features = "SLC17A6")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "GAD1")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "MEIS2")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "RELN")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "FOXP2")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "PAX2")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "FOXP2")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "SOX14")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "SLC6A5")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "EOMES")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "LHX9")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "LMX1A")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "DMBX1")
+
+```
+
+
+```{r}
+FeaturePlot(chicken_integrated, reduction = "umap", features = "OLIG2")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "AQP4")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "PDGFRA")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "CSF1R")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "PLP1")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "PDGFRA")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "FOXJ1")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "SOX10")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "RFX2")
+
+```
+
+
+```{r}
+DimPlot(chicken_integrated, group.by = "ident", reduction = "umap", label = TRUE)
+FeaturePlot(chicken_integrated, reduction = "umap", features = "SLC17A6")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "MEIS2")
+```
+```{r}
+
+
+chicken_integrated <- RenameIdents(
+  chicken_integrated,
+  "0" = "Astroglia",
+  "1" = "Purkinje Cells",
+  "2" = "Midbrain-fated cells/Cerebellar Nuclei (excitatory)",
+  "3" = "Midbrain",
+  "4" = "Granule Cells/Cerebellar Nuclei (excitatory)",
+  "5" = "Microglia",
+  "6" = "Interneurons",
+  "7" = "Cerebellar Nuclei (Inhibitory)",
+  "8" = "Astroglia",
+  "9" = "Oligodendrocytes",
+  "10" = "Astrocytes",
+  "11" = "Oligodendrocytes",
+  "12" = "Glia",
+  "13" = "Glia",
+  "14" = "Microglia"
+  # add more as needed
+)
+chicken_integrated$cell_types <- Idents(chicken_integrated)
+
+```
+
+```{r}
+#chicken_integrated1 <- RunPCA(chicken_integrated1, assay = "SCT")
+chicken_integrated <- RunUMAP(chicken_integrated, dims = 1:30)
+
+```
+
+
+
+
+
+```{r}
+DimPlot(chicken_integrated, reduction = "umap", group.by = "RNA_snn_res.0.5", label = TRUE)
+```
+```{r}
+chicken_integrated_dcn <- subset(chicken_integrated, RNA_snn_res.0.5 %in% c(6,0,3,1,15,2,9))
+
+```
+
+
+```{r}
+chicken_integrated_dcn <- RunPCA(chicken_integrated_dcn, assay = "SCT")
+chicken_integrated_dcn <- RunUMAP(chicken_integrated_dcn, dims = 1:30)
+
+```
+
+```{r}
+FeaturePlot(chicken_integrated_dcn, reduction = "umap", features = c( "ATP5A1W", "HINTW", "MIER3"), min.cutoff = 0)
+```
+
+
+```{r}
+
+FeaturePlot(chicken_integrated_dcn, reduction = "umap", features = "NFIA", min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn, reduction = "umap", features = "NFIB", min.cutoff = 0)
+
+FeaturePlot(chicken_integrated_dcn, reduction = "umap", features = "NFIX", min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn, reduction = "umap", features = "POU3F2", min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn, reduction = "umap", features = "NR2F2", min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn, reduction = "umap", features = "MAF", min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn, reduction = "umap", features = "LMX1A", min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn, reduction = "umap", features = "RELN", min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn, reduction = "umap", features = "OLIG2", min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn, reduction = "umap", features = "ROBO3", min.cutoff = 0)
+
+```
+```{r}
+chicken_integrated_dcn <- FindClusters(chicken_integrated_dcn, resolution = 0.5)
+```
+
+
+```{r}
+FeaturePlot(chicken_integrated_dcn, reduction = "umap", features = "CATH1", min.cutoff = 0)
+DimPlot(chicken_integrated_dcn, group.by = "ident", label = TRUE)
+chicken_integrated_dcn_ref <- subset(chicken_integrated_dcn, SCT_snn_res.0.5 %in% c(6,11,9,8,7,23,4,3,2,0))
+
+```
+```{r}
+chicken_integrated_dcn_ref <- RunPCA(chicken_integrated_dcn_ref, assay = "SCT")
+```
+
+
+```{r}
+chicken_integrated_dcn_ref <- RunUMAP(chicken_integrated_dcn_ref, dims = 1:30)
+```
+
+
+```{r}
+FeaturePlot(chicken_integrated_dcn_ref, reduction = "umap", features = "MEIS2", min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn_ref, reduction = "umap", features = "NR2F2", min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn_ref, reduction = "umap", features = "CRABP1", min.cutoff = 0)
+
+FeaturePlot(chicken_integrated_dcn_ref, reduction = "umap", features = "LMX1A", min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn_ref, reduction = "umap", features = "RELN", min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn_ref, reduction = "umap", features = "LHX9", min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn_ref, reduction = "umap", features = "NTNG1", min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn_ref, reduction = "umap", features = "ROBO3", min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn_ref, reduction = "umap", features = "NRP1", min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn_ref, reduction = "umap", features = "ROBO2", min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn_ref, reduction = "umap", features = "ZFHX3", min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn_ref, reduction = "umap", features = "MAF", min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn_ref, reduction = "umap", features = "OLIG2", min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn_ref, reduction = "umap", features = "NFIA", min.cutoff = 0)
+FeaturePlot(chicken_integrated_dcn_ref, reduction = "umap", features = "NFIB", min.cutoff = 0)
+
+DimPlot(chicken_integrated_dcn_ref, group.by = "ident", label = TRUE)
+```
+
+```{r}
+library(Seurat)
+library(SeuratObject)
+library(SeuratDisk)
+DefaultAssay(chicken_integrated_dcn_ref) <- "RNA"
+chicken_data <- merge(chicken_integrated_dcn_ref, y = data_li_sub)
+# Step 1. Split Seurat object by metadata feature
+# Replace "collector" with your metadata column name
+chicken_list <- SplitObject(chicken_data, split.by = "collector")
+
+# Step 2. Normalize, find variable features, and run PCA for each dataset
+chicken_list <- lapply(chicken_list, function(x) {
+  x <- NormalizeData(x, assay = "RNA")
+  x <- FindVariableFeatures(x, assay = "RNA")
+  x <- ScaleData(x, assay = "RNA")
+  x <- RunPCA(x, assay = "RNA")
+  return(x)
+})
+
+# Step 3. Select integration features
+features <- SelectIntegrationFeatures(object.list = chicken_list, nfeatures = 300)
+
+# Step 4. Find integration anchors using RPCA
+# The reduction = "rpca" argument triggers RPCA-based integration
+chicken_anchors <- FindIntegrationAnchors(
+  object.list = chicken_list,
+  anchor.features = features,
+  reduction = "rpca"
+)
+
+# Step 5. Integrate the datasets
+chicken_integrated <- IntegrateData(anchorset = chicken_anchors)
+
+# Step 6. Downstream analysis
+DefaultAssay(chicken_integrated) <- "integrated"
+chicken_integrated <- ScaleData(chicken_integrated)
+chicken_integrated <- RunPCA(chicken_integrated)
+chicken_integrated <- RunUMAP(chicken_integrated, dims = 1:30)
+
+# Step 7. (Optional) Clustering
+chicken_integrated <- FindNeighbors(chicken_integrated, dims = 1:30)
+chicken_integrated <- FindClusters(chicken_integrated, resolution = 0.5)
+```
+
+```{r}
+chicken_integrated <- RunUMAP(chicken_integrated, dims = 1:20)
+
+```
+
+
+```{r}
+DimPlot(chicken_integrated, group.by = "cellType")
+DimPlot(chicken_integrated, group.by = "sample")
+```
+
+
+```{r}
+FeaturePlot(chicken_integrated, features = c("ROBO3", "LHX2"))
+FeaturePlot(chicken_integrated, features = c("NTNG1", "OLIG2"))
+FeaturePlot(chicken_integrated, features = c("ROBO3", "PCP4"))
+FeaturePlot(chicken_integrated, features = c("ROBO3", "LHX2"))
+
+```
+
+
+
+```{r}
+DefaultAssay(chicken_integrated_med) <- "RNA"
+VlnPlot(chicken_integrated_med, features = c("RELN", "UNC5C"), assay = "RNA", layer = 'counts.1')
+VlnPlot(chicken_integrated_med, features = c("IRX3", "IRX5"), layer = 'counts.1')
+
+
+```
+
+
+
+
+
+```{r}
+FeaturePlot(chicken_integrated, reduction = "umap", features = "LMX1A")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "LHX9")
+
+FeaturePlot(chicken_integrated, reduction = "umap", features = "PAX2")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "ROBO3")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "OLIG2")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "Atoh1")
+
+FeaturePlot(chicken_integrated, reduction = "umap", features = "MEIS2")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "ZFHX3")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "SLC17A6")
+
+FeaturePlot(chicken_integrated, reduction = "umap", features = "GAD1")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "RELN")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "PAX2")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "FOXP2")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "SOX14")
+
+FeaturePlot(chicken_integrated, reduction = "umap", features = "IRX3")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "IRX5")
+FeaturePlot(chicken_integrated, reduction = "umap", features = "NEUROD6")
+
+```
+
+```{r}
+seurat_sub <- subset(chicken_integrated, ident = c(15,14,16), assay = "integrated")
+```
+
+```{r}
+seurat_sub <- RunPCA(seurat_sub, assay = "SCT")
+seurat_sub <- FindNeighbors(seurat_sub)
+```
+
+
+```{r}
+seurat_sub <- RunUMAP(seurat_sub,dims = 1:10) 
+#seurat_sub <- FindClusters(seurat_sub, resolution = 1)
+```
+```{r}
+DimPlot(seurat_sub, reduction = "umap")
+DimPlot(seurat_sub, reduction = "umap", group.by = 'collector', shuffle = TRUE)
+FeaturePlot(seurat_sub, reduction = "umap", features = "NFIB")
+FeaturePlot(seurat_sub, reduction = "umap", features = "NFIA")
+FeaturePlot(seurat_sub, reduction = "umap", features = "NFIX")
+
+FeaturePlot(seurat_sub, reduction = "umap", features = "MEIS2")
+FeaturePlot(seurat_sub, reduction = "umap", features = "LHX9")
+
+FeaturePlot(seurat_sub, reduction = "umap", features = "LMX1A")
+FeaturePlot(seurat_sub, reduction = "umap", features = "MAF")
+FeaturePlot(seurat_sub, reduction = "umap", features = "NFIA")
+FeaturePlot(seurat_sub, reduction = "umap", features = "ADCYAP1")
+
+FeaturePlot(seurat_sub, reduction = "umap", features = "RELN")
+FeaturePlot(seurat_sub, reduction = "umap", features = "LHX9")
+FeaturePlot(seurat_sub, reduction = "umap", features = "ZFHX3")
+FeaturePlot(seurat_sub, reduction = "umap", features = "IRX3")
+FeaturePlot(seurat_sub, reduction = "umap", features = "NEUROD6")
+```
+
+
+
+```{r}
+DimPlot(seurat_sub, group.by = "ident", reduction = "umap")
+```
+
+
+
+```{r}
+seurat_sub <- FindNeighbors(seurat_sub) 
+seurat_sub <- FindClusters(seurat_sub, resolution = 0.2) 
+
+```
+
+```{r}
+DimPlot(, group.by = "ident", reduction = "umap")
+```
+
+```{r}
+seurat_sub_sub <- subset(seurat_sub, idents = c(5,4,2,0))
+```
+
+
+```{r}
+DimPlot(data_li, group.by = "cellType")
+data_li_sub <- subset(data_li, cellType %in% c( "CN", "IshN"))
+FeaturePlot(data_li, features = "Nr2f2")
+```
+
+
+
+```{r}
+load("C:/Users/kebsc/Downloads/GSE160471_RAW/GSM4873767_chicken_data.RData/GSM4873767_chicken_data.RData")
+ex <- UpdateSeuratObject(ex)
+rm(inh)
+```
+
+
+```{r}
+
+#RL[["RNA"]] <- subset(RL[["RNA"]], features = rownames(RL[["SCT"]]))
+
+gene_lists <- list(
+  rownames(seurat_sub_sub),
+  rownames(ex),
+  rownames(data_li_sub)
+)
+
+common.genes <- Reduce(intersect, gene_lists)
+length(common.genes)
+
+
+seurat_sub_sub <- subset(seurat_sub_sub, features = common.genes)
+ex <- subset(ex, features = common.genes)
+ex$Sample <- ex$orig.ident
+seurat_sub_sub$Sample <- 'dev'
+data_li_sub <- subset(data_li_sub, features = common.genes)
+data_li_sub$Sample <- data_li_sub$orig.ident
+
+```
+
+```{r}
+combined <- merge(seurat_sub_sub, y = c(ex, data_li_sub), project="URL_jk")
+
+```
+
+```{r}
+combined <- SCTransform(combined, verbose = FALSE)
+combined.mnn <- RunFastMNN(object.list = SplitObject(combined, split.by = "Sample"), assay = "SCT", verbose = FALSE)
+
+```
+
+```{r}
+combined[["mnn"]] <- CreateDimReducObject(Embeddings(combined.mnn, reduction = "mnn"), assay = "SCT")
+
+```
+
+```{r}
+#combined <- FindNeighbors(combined, reduction = "mnn", dims = 1:20, nn.method = "rann")
+combined <- RunUMAP(combined, reduction = "mnn", dims = 1:50, nn.method = 'rann')
+```
+
+
+```{r}
+combined <- FindNeighbors(combined, reduction = "mnn")
+combined <- FindClusters(combined, resolution = 0.5)
+
+```
+
+
+```{r}
+DimPlot(combined, reduction = "umap", group.by = "Sample")
+DimPlot(combined, reduction = "umap", group.by = "merged.res.3.m.renamed", label = TRUE)
+
+
+FeaturePlot(combined, reduction = "umap", features = "LMX1A")
+FeaturePlot(combined, reduction = "umap", features = "MEIS2")
+FeaturePlot(combined, reduction = "umap", features = "ZFHX3")
+FeaturePlot(combined, reduction = "umap", features = "LHX9")
+FeaturePlot(combined, reduction = "umap", features = "PAX5")
+FeaturePlot(combined, reduction = "umap", features = "MAF")
+FeaturePlot(combined, reduction = "umap", features = "PKIB")
+
+```
+
+
+```{r}
+saveRDS(seurat_sub, "e17cn_bl.rds")
+```
+
+
+```{r}
+VlnPlot(seurat_sub, features = c("nCount_RNA", "nFeature_RNA"), split.by = "orig.ident")
+```
+```{r}
+nExp <- round(0.008 * ncol(seurat_sub))
+library(DoubletFinder)
+
+# Run UMAP before DoubletFinder (helps cluster info)
+seurat_sub <- RunUMAP(seurat_sub, dims = 1:10)
+seurat_sub <- FindNeighbors(seurat_sub, dims = 1:10)
+seurat_sub <- FindClusters(seurat_sub, resolution = 0.5)
+
+# DoubletFinder requires running with optimized pK
+sweep.res.list <- paramSweep_v3(seurat_sub, PCs = 1:10, sct = FALSE)
+sweep.stats <- summarizeSweep(sweep.res.list, GT = FALSE)
+bcmvn <- find.pK(sweep.stats)
+
+# Choose the best pK (based on the maximum BCmetric)
+best_pK <- bcmvn$pK[which.max(bcmvn$BCmetric)]
+
+# Run DoubletFinder with optimal pK
+seurat_obj <- doubletFinder_v3(seurat_sub, PCs = 1:10, pN = 0.25, pK = as.numeric(as.character(best_pK)), nExp = nExp, reuse.pANN = FALSE, sct = FALSE)
+
+```
+
+

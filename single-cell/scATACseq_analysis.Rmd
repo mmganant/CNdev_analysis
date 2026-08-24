@@ -1,0 +1,1324 @@
+---
+title: "01_Process snATAC-seq with ArchR"
+output: html_notebook
+---
+
+```{r message=F}
+library(ArchR);library(cowplot);library(Seurat)
+set.seed(123)
+addArchRThreads(threads = 20)
+```
+
+```{r}
+combined_alltp = readRDS("C:/Users/kebsc/Downloads/combined_alltp2-2025.rds")
+scrna_sub <- subset(combined_alltp, TimePoint != "adult")
+```
+
+
+
+```{r message=F}
+library(ArchR);library(cowplot);library(Seurat)
+set.seed(123)
+addArchRThreads(threads = 20)
+```
+
+
+```{r}
+library(ArchR)
+set.seed(123)
+
+# Set genome (IMPORTANT!)
+addArchRGenome("mm10")  # Must be set before project creation
+
+# Create Arrow Files (with updated arguments)
+inputFiles <- c(
+  "C:/Users/kebsc/Downloads/GSM5393630_E12_snATAC_fragments.tsv.gz",
+  "C:/Users/kebsc/Downloads/GSM5393631_E13_snATAC_fragments.tsv.gz",
+  "C:/Users/kebsc/Downloads/GSM5393632_E14_snATAC_fragments.tsv.gz"
+)
+
+ArrowFiles <- createArrowFiles(
+  inputFiles = inputFiles,
+  sampleNames = c("E12", "E13", "E14"),
+  minTSS = 5,           # updated
+  minFrags = 1250,      # updated
+  maxFrags = 1e7,
+  addTileMat = TRUE,
+  addGeneScoreMat = TRUE,
+  force = FALSE
+)
+
+```
+
+# Infer doublets
+For this dataset, we eventually decided not to remove doublets.
+
+
+```{r}
+proj <- ArchRProject(
+  ArrowFiles = ArrowFiles,
+  outputDirectory = "ArchR_E12_E14",
+  copyArrows = TRUE
+)
+
+# Proceed with LSI, clustering, UMAP, etc.
+
+```
+
+
+# Perform dimensionality reduction and clustering
+```{r}
+proj <- addIterativeLSI(
+  ArchRProj = proj,
+  useMatrix = "TileMatrix", 
+  name = "IterativeLSI", 
+  iterations = 2, 
+  clusterParams = list( #See Seurat::FindClusters
+    resolution = c(0.2), 
+    sampleCells = 10000, 
+    n.start = 10), 
+  varFeatures = 25000, 
+  dimsToUse = 1:35,
+  force = TRUE
+)  
+
+proj <- addClusters(
+  input = proj,
+  reducedDims = "IterativeLSI",
+  method = "Seurat",
+  name = "Clusters",
+  resolution = 0.8,
+  force = TRUE
+)
+
+# Visualizing in a 2D UMAP Embedding
+proj <- addUMAP(
+  ArchRProj = proj, 
+  reducedDims = "IterativeLSI", 
+  name = "UMAP", 
+  nNeighbors = 30, 
+  minDist = 0.3, 
+  metric = "cosine",
+  force = TRUE
+)
+```
+
+
+```{r}
+p1 <- plotEmbedding(ArchRProj = proj, colorBy = "cellColData", name = "Clusters", embedding = "UMAP")
+p2 <- plotEmbedding(ArchRProj = proj, colorBy = "cellColData", name = "Sample", embedding = "UMAP")
+#p2 <- plotEmbedding(ArchRProj = proj, colorBy = "cellColData", name = "label", embedding = "UMAP")
+
+# plotPDF(p1,p2, name = "Plot-UMAP-Clusters_new.pdf", ArchRProj = proj, addDOC = FALSE, width = 10, height = 5)
+```
+
+
+```{r}
+plotEmbedding(
+  ArchRProj = proj,
+  colorBy = "GeneScoreMatrix",    # or "GeneIntegrationMatrix"
+  name = "Olig2",             # replace with your gene of interest, e.g., "CD3D"
+  embedding = "UMAP")
+
+plotEmbedding(
+  ArchRProj = proj,
+  colorBy = "GeneScoreMatrix",    # or "GeneIntegrationMatrix"
+  name = "Zfhx3",             # replace with your gene of interest, e.g., "CD3D"
+  embedding = "UMAP")
+
+plotEmbedding(
+  ArchRProj = proj,
+  colorBy = "GeneScoreMatrix",    # or "GeneIntegrationMatrix"
+  name = "Meis2",             # replace with your gene of interest, e.g., "CD3D"
+  embedding = "UMAP")
+
+plotEmbedding(
+  ArchRProj = proj,
+  colorBy = "GeneScoreMatrix",    # or "GeneIntegrationMatrix"
+  name = "Ntng1",             # replace with your gene of interest, e.g., "CD3D"
+  embedding = "UMAP")
+
+plotEmbedding(
+  ArchRProj = proj,
+  colorBy = "GeneScoreMatrix",    # or "GeneIntegrationMatrix"
+  name = "Lmx1a",             # replace with your gene of interest, e.g., "CD3D"
+  embedding = "UMAP")
+
+plotEmbedding(
+  ArchRProj = proj,
+  colorBy = "GeneScoreMatrix",    # or "GeneIntegrationMatrix"
+  name = "Slc17a6",             # replace with your gene of interest, e.g., "CD3D"
+  embedding = "UMAP")
+
+plotEmbedding(
+  ArchRProj = proj,
+  colorBy = "GeneScoreMatrix",    # or "GeneIntegrationMatrix"
+  name = "Gad1",             # replace with your gene of interest, e.g., "CD3D"
+  embedding = "UMAP")
+
+plotEmbedding(
+  ArchRProj = proj,
+  colorBy = "GeneScoreMatrix",    # or "GeneIntegrationMatrix"
+  name = "Robo3",             # replace with your gene of interest, e.g., "CD3D"
+  embedding = "UMAP")
+
+plotEmbedding(
+  ArchRProj = proj,
+  colorBy = "GeneScoreMatrix",    # or "GeneIntegrationMatrix"
+  name = "Atoh1",             # replace with your gene of interest, e.g., "CD3D"
+  embedding = "UMAP")
+```
+```{r}
+# Ensure the Clusters column exists
+head(getCellColData(proj, "Clusters"))
+
+# Get cluster cells (as character vector)
+cluster_cells <- rownames(subset(getCellColData(proj), Clusters %in% c("C14", "C25", "C24")))
+
+# Try subsetting again
+proj_subset <- subsetArchRProject(
+  ArchRProj = proj,
+  cells = cluster_cells,
+  outputDirectory = "Cluster_Subset_14_25_24_23",
+  dropCells = TRUE,
+  force = TRUE
+)
+
+
+```
+
+
+```{r}
+proj_subset <- addIterativeLSI(
+  ArchRProj = proj_subset,
+  useMatrix = "TileMatrix", 
+  name = "IterativeLSI", 
+  iterations = 2, 
+  clusterParams = list( #See Seurat::FindClusters
+    resolution = c(0.2), 
+    sampleCells = 10000, 
+    n.start = 10), 
+  varFeatures = 10000, 
+  dimsToUse = 1:20,
+  force = TRUE
+)  
+
+proj_subset <- addClusters(
+  input = proj_subset,
+  reducedDims = "IterativeLSI",
+  method = "Seurat",
+  name = "Clusters",
+  resolution = 0.4,
+  force = TRUE
+)
+
+# Visualizing in a 2D UMAP Embedding
+proj_subset <- addUMAP(
+  ArchRProj = proj_subset, 
+  reducedDims = "IterativeLSI", 
+  name = "UMAP", 
+  nNeighbors = 30, 
+  minDist = 0.3, 
+  metric = "cosine",
+  force = TRUE
+)
+```
+
+
+```{r}
+plotEmbedding(ArchRProj = proj_subset, colorBy = "cellColData", name = "Clusters", embedding = "UMAP")
+plotEmbedding(ArchRProj = proj_subset, colorBy = "cellColData", name = "Sample", embedding = "UMAP")
+
+# plotPDF(p1,p2, name = "Plot-UMAP-Clusters_new.pdf", ArchRProj = proj, addDOC = FALSE, width = 10, height = 5)
+```
+
+
+```{r}
+# Get cluster cells (as character vector)
+cluster_cells <- rownames(subset(getCellColData(proj_subset), Clusters %in% c("C9", "C7", "C8", "C6", "C5")))
+
+# Try subsetting again
+proj_subset_cn <- subsetArchRProject(
+  ArchRProj = proj_subset,
+  cells = cluster_cells,
+  outputDirectory = "Cluster_Subset_cn",
+  dropCells = TRUE,
+  force = TRUE
+)
+
+```
+```{r}
+proj_subset_cn <- addIterativeLSI(
+  ArchRProj = proj_subset_cn,
+  useMatrix = "TileMatrix", 
+  name = "IterativeLSI", 
+  iterations = 2, 
+  clusterParams = list( #See Seurat::FindClusters
+    resolution = c(0.2), 
+    sampleCells = 10000, 
+    n.start = 10), 
+  varFeatures = 10000, 
+  dimsToUse = 1:20,
+  force = TRUE
+)  
+
+proj_subset_cn <- addClusters(
+  input = proj_subset_cn,
+  reducedDims = "IterativeLSI",
+  method = "Seurat",
+  name = "Clusters",
+  resolution = 0.4,
+  force = TRUE
+)
+
+# Visualizing in a 2D UMAP Embedding
+proj_subset_cn <- addUMAP(
+  ArchRProj = proj_subset_cn, 
+  reducedDims = "IterativeLSI", 
+  name = "UMAP", 
+  nNeighbors = 30, 
+  minDist = 0.3, 
+  metric = "cosine",
+  force = TRUE
+)
+```
+
+```{r}
+plotEmbedding(
+  ArchRProj = proj_subset_cn,
+  colorBy = "GeneScoreMatrix",    # or "GeneIntegrationMatrix"
+  name = "Olig2",  
+  size = 100, # replace with your gene of interest, e.g., "CD3D"
+  embedding = "UMAP"
+)
+plotEmbedding(
+  ArchRProj = proj_subset_cn,
+  colorBy = "GeneScoreMatrix",    # or "GeneIntegrationMatrix"
+  name = "Zfhx3", 
+  size = 1,# replace with your gene of interest, e.g., "CD3D"
+  embedding = "UMAP"
+)
+plotEmbedding(
+  ArchRProj = proj_subset_cn,
+  colorBy = "GeneScoreMatrix",    # or "GeneIntegrationMatrix"
+  name = "Meis2", 
+  size = 1,# replace with your gene of interest, e.g., "CD3D"
+  embedding = "UMAP"
+)
+plotEmbedding(
+  ArchRProj = proj_subset_cn,
+  colorBy = "GeneScoreMatrix",    # or "GeneIntegrationMatrix"
+  name = "Ntng1", 
+  size = 1,# replace with your gene of interest, e.g., "CD3D"
+  embedding = "UMAP"
+)
+plotEmbedding(
+  ArchRProj = proj_subset_cn,
+  colorBy = "GeneScoreMatrix",    # or "GeneIntegrationMatrix"
+  name = "Lmx1a",             # replace with your gene of interest, e.g., "CD3D"
+  embedding = "UMAP"
+)
+plotEmbedding(
+  ArchRProj = proj_subset_cn,
+  colorBy = "GeneScoreMatrix",    # or "GeneIntegrationMatrix"
+  name = "Slc17a6", 
+  size = 1,# replace with your gene of interest, e.g., "CD3D"
+  embedding = "UMAP"
+)
+plotEmbedding(
+  ArchRProj = proj_subset_cn,
+  colorBy = "GeneScoreMatrix",    # or "GeneIntegrationMatrix"
+  name = "Gad1",  
+  size = 1,# replace with your gene of interest, e.g., "CD3D"
+  embedding = "UMAP"
+)
+plotEmbedding(
+  ArchRProj = proj_subset_cn,
+  colorBy = "GeneScoreMatrix",    # or "GeneIntegrationMatrix"
+  name = "Robo3",         
+  size = 1,# replace with your gene of interest, e.g., "CD3D"
+  embedding = "UMAP"
+)
+plotEmbedding(
+  ArchRProj = proj_subset_cn,
+  colorBy = "GeneScoreMatrix",    # or "GeneIntegrationMatrix"
+  name = "Atoh1",  
+  size = 1,# replace with your gene of interest, e.g., "CD3D"
+  embedding = "UMAP"
+)
+
+
+
+```
+
+```{r}
+library(Seurat)
+```
+
+
+```{r}
+scrna = readRDS("C:/Users/kebsc/Downloads/combined_alltp.rds")
+```
+
+
+```{r}
+DefaultAssay(scrna) <- "SCT"
+#scrna <- JoinLayers(scrna)
+```
+
+```{r}
+scrna_sub = subset(scrna, subset = TimePoint %in% c("E12.5","E13.5", "E14.5"))
+```
+
+```{r}
+scrna_sub <- FindNeighbors(scrna_sub, reduction = "mnn", dims = 1:30)
+scrna_sub <- FindClusters(scrna_sub, resolution = 0.7)
+```
+
+```{r}
+DefaultAssay(scrna_sub) <- "RNA"
+scrna_sub <- JoinLayers(scrna_sub)
+```
+
+
+```{r}
+DimPlot(scrna_sub, group.by = "seurat_clusters")
+FeaturePlot(scrna_sub, features = "Lhx9")
+```
+```{r}
+scrna_sub_intlat = subset(scrna_sub, seurat_clusters %in% c(4,6,9))
+
+all_markers <- FindAllMarkers(
+  object = scrna_sub_intlat,
+  assay = "RNA",            # or "SCT", "integrated", etc.
+  slot = "data",            # "data" for log-normalized data; "counts" for raw
+  only.pos = TRUE,          # if TRUE, only return upregulated genes
+  min.pct = 0.9,            # expressed in at least 10% of cells in either cluster
+  logfc.threshold = 0.25    # minimum log2 fold-change
+)
+
+```
+
+```{r}
+library(dplyr)
+
+top_markers <- all_markers %>%
+  group_by(cluster) %>%
+  top_n(n = 10, wt = avg_log2FC)   # top 10 markers per cluster
+
+DoHeatmap(scrna_sub_intlat, features = unique(top_markers$gene)) + NoLegend()
+
+```
+
+
+
+
+```{r}
+scrna_sub = FindVariableFeatures(scrna_sub, nfeatures = 300)
+```
+```{r}
+proj_subset_cn <- saveArchRProject(ArchRProj = proj_subset_cn, outputDirectory = "Save-proj_subset_cn", load = TRUE)
+
+
+```{r}
+library(ArchR)
+proj_subset_cn = loadArchRProject(path = "C:/Users/kebsc/Downloads/RNA_ATAC_Cerebellum-main/RNA_ATAC_Cerebellum-main/snATAC-seq/Save-proj_subset_cn")
+
+```
+
+
+
+
+
+
+```{r}
+library(ArchR)
+library(Seurat)
+
+# 1. Extract gene names from ArchR GeneScoreMatrix
+gsm <- getMatrixFromProject(proj_subset_cn, useMatrix = "GeneScoreMatrix")
+genes_atac <- rowData(gsm)$name
+genes_atac <- make.unique(genes_atac)
+
+# 2. Extract gene names from Seurat RNA assay
+genes_rna <- rownames(scrna_sub[["RNA"]])
+
+# 3. Find shared genes
+shared_genes <- intersect(genes_rna, genes_atac)
+cat("Number of shared genes:", length(shared_genes), "\n")
+
+# 4. Subset Seurat object to shared genes
+scrna_sub <- subset(scrna_sub, features = shared_genes)
+
+# Optional: Check after subsetting
+cat("Number of genes in Seurat after subsetting:", nrow(scrna_sub[["RNA"]]), "\n")
+```
+
+
+
+
+
+
+```{r}
+scrna_sub <-FindClusters(scrna_sub, resolution = 0.8)
+DimPlot(scrna_sub, group.by = "seurat_clusters", label = TRUE)
+```
+
+
+```{r}
+plotEmbedding(
+  ArchRProj = proj_subset_cn,
+  colorBy = "cellColData",
+  name = "Sample",
+  embedding = "UMAP",
+  size = 2.5,
+  returnGG = TRUE
+)
+```
+```{r}
+proj_subset_cn <- addClusters(
+  input = proj_subset_cn,
+  reducedDims = "IterativeLSI",
+  name = "Clusters1",
+  resolution = 0.6,
+  force = TRUE# you can adjust (0.2–2.0)
+)
+```
+```{r}
+plotEmbedding(
+  ArchRProj = proj_subset_cn,
+  colorBy = "cellColData",
+  name = "Clusters1",
+  embedding = "UMAP",
+  size = 2.5
+)
+```
+
+
+```{r}
+newNames <- c(
+  "C1" = "Granule Cells",
+
+  "C4" = "RL",
+  "C5" = "Med",
+  "C6" = "Med",
+  "C7" = "IntA/Lat",
+  "C8" = "IntA/Lat",
+  "C9" = "IntP",
+  "C10" = "IntA/Lat",
+  "C11" = "Interposed/Lateral early"
+  
+  # add more if needed
+)
+
+proj_subset_cn$Clusters_renamed <- mapLabels(
+  proj_subset_cn$Clusters1,
+  newLabels = newNames
+)
+
+p <- plotEmbedding(
+  ArchRProj = proj_subset_cn,
+  colorBy = "cellColData",
+  name = "Clusters_renamed",
+  embedding = "UMAP",
+  size = 2.5,
+  returnGG = TRUE
+)
+
+# Increase legend size
+p + theme(
+  legend.key.size = unit(1.5, "cm"),     # size of legend keys
+  legend.text = element_text(size = 18), # size of labels
+  legend.title = element_text(size = 20) # title size
+)
+
+
+```
+```{r}
+# View cluster names
+table(proj_subset_cn$Clusters_renamed)
+
+# Remove C7
+proj_filtered <- proj_subset_cn[!(proj_subset_cn$Clusters1 %in% c("C1", "C2", "C3")), ]
+
+proj_filtered <- addIterativeLSI(
+  ArchRProj = proj_filtered,
+  useMatrix = "TileMatrix",
+  name = "IterativeLSI",
+  force = TRUE
+)
+proj_filtered <- addUMAP(
+  ArchRProj = proj_filtered,
+  reducedDims = "IterativeLSI",
+  name = "UMAP",
+  nNeighbors = 20,
+  minDist = 0.2,
+  force = TRUE
+)
+```
+
+
+```{r}
+proj_filtered <- addClusters(
+  input = proj_filtered,
+  reducedDims = "IterativeLSI",
+  name = "Clusters",
+  resolution = 1,
+  force = TRUE
+)
+```
+
+
+```{r}
+plotEmbedding(
+  ArchRProj = proj_filtered,
+  colorBy = "cellColData",
+  name = "Clusters1",
+  embedding = "UMAP",
+  size = 2.5
+)
+
+plotEmbedding(
+  ArchRProj = proj_filtered,
+  colorBy = "GeneScoreMatrix",
+  name = "Lmx1a",
+  embedding = "UMAP",
+  size = 5
+)
+
+plotEmbedding(
+  ArchRProj = proj_filtered,
+  colorBy = "GeneScoreMatrix",
+  name = "Olig2",
+  embedding = "UMAP",
+  size = 5
+)
+
+plotEmbedding(
+  ArchRProj = proj_filtered,
+  colorBy = "GeneScoreMatrix",
+  name = "Irx3",
+  embedding = "UMAP",
+  size = 5
+)
+
+
+plotEmbedding(
+  ArchRProj = proj_filtered,
+  colorBy = "cellColData",
+  name = "Sample",
+  embedding = "UMAP",
+  size = 2.5
+)
+
+plotEmbedding(
+  ArchRProj = proj_filtered,
+  colorBy = "cellColData",
+  name = "Clusters_renamed",
+  embedding = "UMAP",
+  size = 2.5
+)
+
+```
+
+
+```{r}
+proj_filtered <- addPeakSet(
+  ArchRProj = proj_filtered,
+  peakSet = pk,
+  #force = TRUE
+)
+```
+
+
+```{r}
+proj_filtered <- addPeakMatrix(proj_filtered)
+```
+
+```{r}
+library(Seurat)
+library(ArchR)
+library(ggplot2)
+library(RColorBrewer)
+
+# 5. Run addGeneIntegrationMatrix
+proj_filtered <- addGeneIntegrationMatrix(
+    ArchRProj = proj_filtered,
+    useMatrix = "GeneScoreMatrix",
+    matrixName = "GeneIntegrationMatrix",
+    reducedDims = "IterativeLSI",
+    seRNA = scrna_sub,
+    addToArrow = FALSE,
+    nGenes = 300,
+    dims = 1:20,
+    reduction = "cca",
+    groupRNA = "branch",
+    nameCell = "predictedCell_Un",
+    nameGroup = "predictedGroup_Un",
+    nameScore = "predictedScore_Un"
+)
+
+cat("Integration complete!\n")
+
+
+# --- Step 1: Prepare cluster labels ---
+```
+
+
+```{r}
+# Adjust Seurat cluster labels by adding 1 (if needed)
+cluster_chars <- as.character(scrna_sub$seurat_clusters)
+cluster_nums <- as.numeric(cluster_chars)
+cluster_nums_plus1 <- cluster_nums + 1
+scrna_sub$seurat_clusters1 <- as.character(cluster_nums_plus1)
+
+# Get unique cluster labels from both datasets as character vectors
+rna_clusters <- sort(unique(scrna_sub$branch))
+atac_clusters <- sort(unique(as.character(proj_filtered$predictedGroup_Un)))
+
+# --- Step 2: Define a unified palette for all clusters ---
+
+all_clusters <- union(rna_clusters, atac_clusters)
+n_all <- length(all_clusters)
+shared_palette_all <- rep(brewer.pal(8, "Set2"), length.out = n_all)
+names(shared_palette_all) <- all_clusters
+
+# Subset palette for each dataset's clusters
+pal_rna <- shared_palette_all[rna_clusters]
+pal_atac <- shared_palette_all[atac_clusters]
+```
+
+
+```{r}
+# --- Step 3: Plot scRNA-seq UMAP with consistent palette ---
+
+p_rna1 <- DimPlot(
+  scrna_sub,
+  group.by = "branch",
+  #label = TRUE,
+  cols = pal_rna
+)  
+  #ggtitle("scRNA-seq clusters") +
+  #theme_minimal(base_size = 14) +
+  #theme(plot.title = element_text(face = "bold"))
+
+print(p_rna1)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/CN_Lmx1b.png",
+  plot = p_rna1,
+  width = 7,
+  height = 5,
+)
+
+# --- Step 4: Plot ArchR UMAP with consistent palette ---
+```
+
+
+```{r}
+
+pal_atac <- c(
+  "Int/Lat Prog" = "yellow",
+  "Med"          = "blue",
+  "IntA/Lat"     = "#fca800",
+  "IntA"     = "#f7a2f9",
+  "Lat"     = "#cf3731",
+  "RL"           = "lightblue",
+  #"IntP/IntA"  
+  "IntP"         = "#78b958",
+  #"Med_gly"      = "#17becf",
+  "Early Medial"        = "#824819",
+  "Late Medial"         = "blue",
+  "Midbrain-fated Cells"  = "black",
+  "Granule Cells+UBCs" = "purple"
+)
+
+p_atac1 <- plotEmbedding(
+  ArchRProj = proj_filtered,
+  colorBy = "cellColData",
+  name = "predictedGroup_Un",
+  embedding = "UMAP",
+  pal = pal_atac,
+  returnGG = TRUE,
+  size = 2.5
+) 
+  #ggtitle("scATAC-seq clusters") +
+  #theme_minimal(base_size = 14) +
+  #theme(plot.title = element_text(face = "bold"))
+
+
+# Increase point size by modifying the geom_point layer
+p_atac1 + 
+  theme(
+    legend.key.size = unit(1.4, "cm"),     # bigger legend boxes
+    legend.text = element_text(size = 10), # bigger label text
+    legend.title = element_text(size = 10) # bigger title
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 3)))  # bigger legend points
+
+print(p_atac1)
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/scATAC_celltypes.png",
+  plot = p_atac1,
+  width = 7,
+  height = 5,
+)
+
+```
+
+
+
+```{r}
+p_tss <- plotGroups(
+  ArchRProj = proj_filtered,
+  groupBy = "Sample",
+  colorBy = "cellColData",
+  name = "TSSEnrichment",
+  plotAs = "violin",
+  addBoxPlot = TRUE
+) +
+  geom_jitter(
+    width = 0.15,
+    size = 0.4,
+    alpha = 0.35
+  )
+p_tss
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/scATAC_TSS_enrichment_Sample.svg",
+  plot = p_tss,
+  width = 7,
+  height = 5,
+)
+
+p_tss <- plotGroups(
+  ArchRProj = proj_filtered,
+  groupBy = "Sample",
+  colorBy = "cellColData",
+  name = "log10(nFrags)",
+  plotAs = "violin",
+  addBoxPlot = TRUE
+) +
+  geom_jitter(
+    width = 0.15,
+    size = 0.4,
+    alpha = 0.35
+  )
+p_tss
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/scATAC_nfrags_enrichment_Sample.svg",
+  plot = p_tss,
+  width = 7,
+  height = 5,
+)
+
+p_tss <- plotGroups(
+  ArchRProj = proj_filtered,
+  groupBy = "predictedGroup_Un",
+  colorBy = "cellColData",
+  name = "TSSEnrichment",
+  plotAs = "violin",
+  addBoxPlot = TRUE
+) +
+  geom_jitter(
+    width = 0.15,
+    size = 0.4,
+    alpha = 0.35
+  )
+p_tss
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/scATAC_TSS_enrichment_clusters.svg",
+  plot = p_tss,
+  width = 7,
+  height = 5,
+)
+
+p_tss <- plotGroups(
+  ArchRProj = proj_filtered,
+  groupBy = "predictedGroup_Un",
+  colorBy = "cellColData",
+  name = "log10(nFrags)",
+  plotAs = "violin",
+  addBoxPlot = TRUE
+) +
+  geom_jitter(
+    width = 0.15,
+    size = 0.4,
+    alpha = 0.35
+  )
+p_tss
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/scATAC_nfrags_enrichment_clusters.svg",
+  plot = p_tss,
+  width = 7,
+  height = 5,
+)
+
+```
+
+
+
+```{r}
+p <- plotEmbedding(
+  ArchRProj = proj_filtered,
+  colorBy = "cellColData",
+  name = "Sample",
+  embedding = "UMAP",
+  #pal = pal_atac,
+  returnGG = TRUE,
+  size = 3
+)
+
+# Increase point size by modifying the geom_point layer
+p + 
+  theme(
+    legend.key.size = unit(1.4, "cm"),     # bigger legend boxes
+    legend.text = element_text(size = 10), # bigger label text
+    legend.title = element_text(size = 10) # bigger title
+  ) +
+  guides(color = guide_legend(override.aes = list(size = 3)))  # bigger legend points
+
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/scATAC_timepoint.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+
+```
+
+
+```{r}
+p <- plotEmbedding(
+  ArchRProj = proj_filtered,
+  colorBy = "GeneScoreMatrix",
+  name = "Lmx1a",
+  embedding = "UMAP",
+  returnGG = TRUE,
+  size =2,
+  plotAs = 'points',
+  rastr = FALSE
+)
+
+# Increase point size by modifying the geom_point layer
+p
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/scATAC_Lmx1a.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p <- plotEmbedding(
+  ArchRProj = proj_filtered,
+  colorBy = "GeneScoreMatrix",
+  name = "Olig2",
+  embedding = "UMAP",
+  returnGG = TRUE,
+  size =2,
+  plotAs = 'points',
+  rastr = FALSE)
+
+# Increase point size by modifying the geom_point layer
+p
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/scATAC_Olig2.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+p <- plotEmbedding(
+  ArchRProj = proj_filtered,
+  colorBy = "GeneScoreMatrix",
+  name = "Irx3",
+  embedding = "UMAP",
+  #pal = pal_atac,
+  returnGG = TRUE,
+  size =2,
+  plotAs = 'points',
+  rastr = FALSE
+)
+
+# Increase point size by modifying the geom_point layer
+p#+ geom_point(size = 10)
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/scATAC_Irx3.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+```
+```{r}
+# --- EDIT THESE ---
+PEAK_BED  <- "C:/Users/kebsc/Downloads/mm10_bedfile.bed"
+proj <- proj_filtered
+suppressPackageStartupMessages({
+  library(ArchR)
+  library(rtracklayer)
+  library(GenomicRanges)
+  library(GenomeInfoDb)
+  library(Matrix)
+})
+
+
+
+raw_lines <- readLines(PEAK_BED, warn=FALSE)
+cat("Lines total:", length(raw_lines), "\n",
+    "Lines starting with 'chr':", sum(grepl("^chr", raw_lines)), "\n")
+
+# Import without lossy steps
+pk0 <- tryCatch(import(PEAK_BED), error=function(e) NULL)
+if (is.null(pk0)) {
+  dt <- fread(text=paste(raw_lines[grepl("^chr", raw_lines)], collapse="\n"),
+              header=FALSE, sep="\t", data.table=FALSE)
+  names(dt)[1:3] <- c("chr","start","end")
+  pk0 <- GRanges(dt$chr, IRanges(as.integer(gsub("[^0-9-]","",dt$start)),
+                                  as.integer(gsub("[^0-9-]","",dt$end))))
+}
+cat("After import:", length(pk0), "\n")
+
+pk1 <- pk0
+seqlevelsStyle(pk1) <- "UCSC"
+cat("After style:", length(pk1), "\n")
+
+pk2 <- keepStandardChromosomes(pk1, pruning.mode="coarse")
+pk2 <- pk2[seqnames(pk2)!="chrM"]
+cat("After keepStandardChromosomes:", length(pk2), "\n")
+
+# IMPORTANT: do NOT reduce yet
+# If you previously resized+reduce, that can collapse thousands to a handful.
+
+# pk2 from your last step (339,815 intervals)
+pk <- pk2
+
+# Give unique names if missing/duplicated
+if (is.null(mcols(pk)$name)) mcols(pk)$name <- sprintf("peak_%06d", seq_along(pk))
+mcols(pk)$name <- make.unique(as.character(mcols(pk)$name))
+```
+
+```{r}
+# Register and build PeakMatrix
+proj <- addPeakSet(proj, peakSet = pk, force = TRUE)
+proj <- addPeakMatrix(proj)
+```
+
+
+```{r}
+proj <- addMotifAnnotations(
+  ArchRProj = proj,
+  motifSet = 'cisbp',
+  name = "Motif",
+  #force = TRUE
+)
+```
+
+
+```{r}
+proj <- addBgdPeaks(proj, method = "ArchR")
+```
+
+
+```{r}
+proj <- addDeviationsMatrix(
+  ArchRProj = proj,
+  peakAnnotation = "Motif",
+  matrixName = "MotifMatrix",
+  #force=TRUE
+)
+
+```
+
+```{r}
+motif_mat <- getMatrixFromProject(proj, useMatrix = "MotifMatrix")
+dev_mat <- assays(motif_mat)[['z']]
+
+smad_row <- grep("Rara", rownames(dev_mat), value = TRUE, ignore.case = TRUE)[1]
+
+cells <- rownames(proj@cellColData)
+proj$Rara_activity <- dev_mat[smad_row, cells]
+
+```
+
+
+```{r}
+p <- plotEmbedding(
+  ArchRProj = proj,
+  colorBy = "cellColData",
+  name = "Rara_activity",
+  embedding = "UMAP",
+  #pal = pal_atac,
+  returnGG = TRUE,
+  size =2,
+  plotAs = 'points',
+  rastr = FALSE
+)
+p
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/scATAC_Rara_sites.png",
+  plot = p,
+  width = 7,
+  height = 5,
+)
+
+plotEmbedding(
+  ArchRProj = proj,
+  colorBy = "GeneScoreMatrix",
+  name = "Rara",
+  embedding = "UMAP",
+  #pal = pal_atac,
+  returnGG = TRUE,
+  size =2,
+  plotAs = 'points',
+  rastr = FALSE
+)
+
+
+```
+
+
+
+
+```{r}
+library(ggplot2)
+df$predictedGroup_Un <- factor(
+  df$predictedGroup_Un,
+  levels = c(
+    "Lat",
+    "IntA",
+    "IntA/Lat",
+    "Int/Lat Prog",
+    "IntP",
+    "Med",
+    "RL"
+    
+  )
+)
+
+library(ggplot2)
+
+p_bar <- ggplot(
+  df,
+  aes(x = predictedGroup_Un, y = Rara_dev)
+) +
+  stat_summary(
+    fun = mean,
+    geom = "col",
+    width = 0.45,
+    fill = "grey80",
+    color = "black",
+    linewidth = 0.4
+  ) +
+  stat_summary(
+    fun.data = mean_se,
+    geom = "errorbar",
+    width = 0.15,
+    linewidth = 0.4
+  ) +
+  geom_jitter(
+    width = 0.12,
+    size = 0.5,
+    alpha = 0.25,
+    color = "black"
+  ) +
+  labs(
+    x = NULL,
+    y = "RARA motif activity"
+  ) +
+  theme_classic(base_size = 12) +
+  theme(
+    legend.position = "none",
+    axis.text.x = element_text(
+      angle = 45,
+      hjust = 1,
+      vjust = 1,
+      colour = "black"
+    ),
+    axis.text.y = element_text(colour = "black"),
+    axis.title.y = element_text(face = "bold"),
+    axis.line = element_line(linewidth = 0.4),
+    axis.ticks = element_line(linewidth = 0.4)
+  )
+
+p_bar
+
+
+p_bar
+ggsave(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/scATAC_Rara_diff_activity_clusters.svg",
+  plot = p_bar,
+  width = 7,
+  height = 5,
+)
+
+
+```
+
+```{r}
+library(ggplot2)
+library(ggpubr)
+library(ArchR)
+
+
+# -------------------------------
+gene_mat <- getMatrixFromProject(proj_filtered, useMatrix = "GeneScoreMatrix")
+gs_mat <- assays(gene_mat)[["GeneScoreMatrix"]]
+```
+
+
+
+```{r}
+library(ArchR)
+library(ggplot2)
+library(ggpubr)
+library(patchwork)
+
+# -------------------------------
+# 1. Extract Rara motif activity
+# -------------------------------
+
+# -------------------------------
+# 2. Extract Rara GeneScore
+# -------------------------------
+gene_mat <- getMatrixFromProject(proj, useMatrix = "GeneScoreMatrix")
+gene_names <- rowData(gene_mat)$name
+cell_names_gene <- colData(gene_mat)$name
+
+# Find Rara gene
+gene_row <- grep("Rara", gene_names, ignore.case = TRUE)
+if(length(gene_row) == 0) stop("Rara gene not found!")
+```
+
+
+```{r}
+# Extract numeric vector and match to ArchR cells
+rara_gene_vec <- assays(gene_mat)[["GeneScoreMatrix"]][gene_row, ]
+#rara_gene_vec <- rara_gene_vec[match(proj_filtered$cellNames, cell_names_gene)]
+proj_filtered$Rara_gene <- rara_gene_vec
+
+# -------------------------------
+# 3. Prepare data frame for plotting
+# -------------------------------
+df <- data.frame(
+  predictedGroup_Un = as.factor(proj_filtered$predictedGroup_Un),
+  Rara_gene = proj_filtered$Rara_gene
+)
+
+# All pairwise comparisons
+comparisons_list <- combn(levels(df$predictedGroup_Un), 2, simplify = FALSE)
+
+# -------------------------------
+# 4. Create side-by-side plots
+# -------------------------------
+
+# GeneScore plot
+ggplot(df, aes(x = predictedGroup_Un, y = Rara_gene, fill = predictedGroup_Un)) +
+  geom_boxplot(alpha = 0.7, outlier.shape = NA) +
+  geom_jitter(width = 0.15, size = 1, alpha = 0.6) +
+  
+  labs(y = "Rara GeneScore", x = "") +
+  theme_minimal(base_size = 14) +
+  theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+```{r}
+groups = c("IntA/Lat", "IntP")
+meta = getCellColData(proj)
+cells_keep = rownames(meta)[meta$predictedGroup_Un %in% groups]
+
+proj_sub = subsetArchRProject(ArchRProj = proj, cells = cells_keep,   force = TRUE)
+```
+
+
+```{r}
+res <- getMarkerFeatures(ArchRProj = proj_sub, useMatrix = "MotifMatrix", groupBy = "predictedGroup_Un", testMethod = 'wilcoxon')
+```
+
+
+```{r}
+library(SummarizedExperiment)
+eps = 1e-6
+M = assay(res, "Mean")
+B = assay(res, "MeanBGD")
+M <- as.matrix(assay(res, "Mean"))
+B <- as.matrix(assay(res, "MeanBGD"))
+
+L2F <- log2((M+eps)/(B+eps))
+L2F[!is.finite(L2F)] = 0
+L2F <- as.matrix(L2F)
+dimnames(L2F)=dimnames(assay(res, "Mean"))
+assays(res)[["Log2FC"]] <- L2F
+
+k <- 10
+mg <- plotMarkerHeatmap(seMarker = res,  cutOff = "FDR <= 0.05 & Log2FC >= 2.5", transpose = TRUE,plotLog2FC = TRUE, nLabel = 10)
+mg
+```
+```{r}
+#TF footprinting for RARE motif
+group_col = "predictedGroup_Un"
+# coverage per group (if not already present)
+proj <- addGroupCoverages(
+  ArchRProj = proj,
+  groupBy   = group_col
+)
+```
+
+
+```{r}
+proj <- addMotifAnnotations(
+  ArchRProj = proj,
+  motifSet = "cisbp",
+  annoName = "Motif",
+  species = "Mus musculus",
+  force = TRUE
+)
+
+motif_positions <- getPositions(
+  ArchRProj = proj,
+  name = "Motif"
+)
+```
+
+
+```{r}
+rar_motifs <- grep(
+  "RAR|RARA|RARB|RARA|RARG|RXRA|RXRA|RXRB|RXRG",
+  names(motif_positions),
+  value= TRUE,
+  ignore.case = TRUE)
+
+
+rar_positions <- motif_positions[rar_motifs]
+
+# compute footprints
+seFoot <- getFootprints(
+  ArchRProj = proj,
+  groupBy   = group_col,
+  positions = rar_positions
+  #motifSet  = "Motif",
+  #name      = rara_motif
+)
+```
+
+
+```{r}
+seFoot_IntP <- getFootprints(
+  ArchRProj = proj,
+  positions = rar_positions,
+  groupBy = group_col,
+  useGroups = c("IntP", "IntA", "Lat")
+)
+# plot RAR footprints across groups
+p_fp <- plotFootprints(
+  seFoot    = seFoot_IntP,
+  ArchRProj = proj,
+  #groupBy   = group_col,
+  names = rar_motifs,
+  smoothWindow = 20
+)
+p_fp
+
+```
+
