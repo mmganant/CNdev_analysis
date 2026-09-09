@@ -266,7 +266,6 @@ FeaturePlot(RL, features = "Lmx1a")
 ```{r}
 RL_sub = RL
 FeaturePlot(RL_sub, features = c("Nr2f2", "Nfib", "En1", "Lmx1a"))
-FeaturePlot(combined_alltp, features = c("Nr2f2", "Nfib", "Pax5", "Lmx1a"), max.cutoff = 4)
 FeaturePlot(URL, features = c("En1"), max.cutoff = 4)
 DimPlot(RL_sub, group.by = "TimePoint")
 #FeaturePlot(URL, features = c("Hoxa2"), max.cutoff = 4)
@@ -323,33 +322,13 @@ RL_sub = subset(RL, seurat_clusters !=7)
 
 
 ```{r}
-#combined_alltp = readRDS("C:/Users/kebsc/Downloads/combined_alltp2-2025.rds")
+combined_alltp = readRDS("C:/Users/kebsc/Downloads/combined_alltp2-2025.rds")
 
-#URL = readRDS("C:/Users/kebsc/Downloads/URL.rds")
-
-```
-
-
-
-```{r}
-
-# 2. LOAD and CREATE ensembl object
-library(biomaRt)
-ensembl <- useMart("ensembl", dataset = "mmusculus_gene_ensembl")
-
-# 3. TEST connection
-listDatasets(ensembl)[1:5, ]
-
-# 4. NOW get your TFs
-tf_list <- getBM(attributes = c("mgi_symbol", "ensembl_gene_id"),
-                 filters = "go",
-                 values = "GO:0003700",  # DNA-binding TFs
-                 mart = ensembl)
-
-print(paste("Found", nrow(tf_list), "DNA-binding TFs"))
-print(head(tf_list))
+URL = readRDS("C:/Users/kebsc/Downloads/URL.rds")
 
 ```
+
+
 
 
 ```{r}
@@ -384,7 +363,7 @@ DimPlot(URL, group.by = "branch")
 
 
 ```{r}
-URL_e13_lda <-subset(URL, TimePoint %in% c("E13.5", "E12.5"))
+URL_e13_lda <-subset(URL, TimePoint %in% c("E13.5", "E12.5", "E14.5"))
 # Keep ALL cells EXCEPT "RL" and "Int/Lat Prog"
 URL_e13_lda <- subset(URL_e13_lda, 
                       !(branch %in% c("transition")))
@@ -402,7 +381,7 @@ print(paste("Found", length(tf_list1), "TFs in your data"))
 tf_features <- intersect(tf_list1, rownames(URL_e13_lda))
 URL_e13_lda_sub <- URL_e13_lda[tf_features, ]
 ```
-
+##########################################EARLY VS LATE CLASSIFIER##################################################
 
 ```{r}
 
@@ -483,9 +462,7 @@ if (shuffle_genes) {
 
   cat("Gene names shuffled\n")
 }
-```
 
-```{r}
 # =============================================================================
 # 3. FEATURE SELECTION (TRAIN ONLY)
 # =============================================================================
@@ -514,12 +491,12 @@ cat("Training features:", length(train_features), "\n")
 # 4. BUILD MATRICES
 # =============================================================================
 # TRAIN
-train_data <- GetAssayData(train_obj, layer = "scale.data")[train_features, ]
+train_data <- GetAssayData(train_obj, layer = "scale.data")[train_features, ]#train_data <- GetAssayData(train_obj, layer = "scale.data")[train_features, ]
 train_matrix <- t(as.matrix(train_data))
 train_labels <- as.factor(train_obj$branch)
 
 # TEST
-test_data <- GetAssayData(test_obj, layer = "scale.data")[train_features, ]
+test_data <- GetAssayData(test_obj, layer = "scale.data")[train_features, ]#test_data <- GetAssayData(test_obj, layer = "scale.data")[train_features, ]
 test_matrix <- t(as.matrix(test_data))
 test_labels <- as.factor(test_obj$branch)
 
@@ -530,7 +507,8 @@ fit <- cv.glmnet(
   x = train_matrix,
   y = train_labels,
   family = "multinomial",
-  alpha = 0   # ridge = stable
+  alpha = 0,   # ridge = stable
+  standardize=TRUE
 )
 
 cat("Model trained!\n")
@@ -549,6 +527,9 @@ cat("Test accuracy:", acc, "\n")
 cat("\nConfusion matrix:\n")
 print(table(pred, test_labels))
 
+
+
+
 # =============================================================================
 # 7. PERMUTATION TEST (SIGNAL CHECK)
 # =============================================================================
@@ -558,7 +539,8 @@ fit_perm <- cv.glmnet(
   x = train_matrix,
   y = perm_labels,
   family = "multinomial",
-  alpha = 0
+  alpha = 0,
+  standardize=TRUE
 )
 
 pred_perm <- predict(fit_perm, newx = test_matrix, s = "lambda.min", type = "class")
@@ -576,7 +558,7 @@ p <- heatmap(cm_prop)
 #  height = 5
 #)
 
-heatmap(cm_prop)
+heatmap(cm_prop, legend = TRUE)
 
 #dev.off()
 
@@ -594,6 +576,34 @@ test_obj$predicted_fate <- pred_labels
 test_obj$max_fate_prob <- max_prob
 test_obj$fate_entropy <- entropy
 
+
+correct <- pred_labels == as.character(test_labels)
+test_eval = data.frame(
+  true_label = as.character(test_labels),
+  predicted_abel = pred_labels,
+  max_prob = max_prob,
+  correct = correct
+)
+
+head(test_eval)
+
+test_eval$prob_bin <- cut(
+  test_eval$max_prob,
+  breaks = seq(0,1,by = 0.1),
+  include.lowest = TRUE
+)
+library(dplyr)
+
+calibration <- test_eval %>%
+  group_by(prob_bin) %>%
+  summarise(
+    n=n(),
+    mean_pred_prob = mean(max_prob),
+    empirical_accuracy = mean(correct),
+    .groups = "drop"
+  )
+
+print(calibration)
 
 # =============================================================================
 # 8. APPLY TO RL_sub (FIXED)
@@ -654,27 +664,574 @@ RL_sub_atoh1$max_fate_prob <- max_prob
 RL_sub_atoh1$fate_entropy <- entropy
 
 cat("\nRL_sub predictions complete!\n")
+```
 
+```{r}
+install.packages("svglite")  # run once
 
+library(pheatmap)
+library(svglite)
 
+svglite("C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/confusion_matrix_earlylate.svg", width = 6, height = 5)
+
+pheatmap(
+  cm_prop,display_numbers = TRUE,number_format = "%.2f", color = colorRampPalette(c("white", "red"))(100),breaks = seq(0, 1, length.out = 101))
+
+dev.off()
 ```
 
 
 ```{r}
-id="h2y8qf"
+library(dplyr)
+library(ggplot2)
+
+# =============================================================================
+# 1. PREDICTION
+# =============================================================================
+
+pred <- predict(
+  fit,
+  newx = test_matrix,
+  s = "lambda.min",
+  type = "response"
+)
+
+prob_mat <- pred[, , 1]
+
+pred_labels <- colnames(prob_mat)[max.col(prob_mat)]
+max_prob <- apply(prob_mat, 1, max)
+
+# Entropy
+entropy <- -rowSums(
+  prob_mat * log(prob_mat + 1e-10)
+)
+
+# =============================================================================
+# 2. STORE PREDICTIONS IN SEURAT OBJECT
+# =============================================================================
+
+test_obj$predicted_fate <- pred_labels
+test_obj$max_fate_prob <- max_prob
+test_obj$fate_entropy <- entropy
+
+# =============================================================================
+# 3. EVALUATION TABLE
+# =============================================================================
+
+correct <- pred_labels == as.character(test_labels)
+
+test_eval <- data.frame(
+  true_label = as.character(test_labels),
+  predicted_label = pred_labels,
+  max_prob = max_prob,
+  correct = correct
+)
+
+head(test_eval)
+
+# =============================================================================
+# 4. CALIBRATION BY PREDICTED FATE
+# =============================================================================
+
+# Use smaller bins so threshold is more precise
+test_eval$prob_bin <- cut(
+  test_eval$max_prob,
+  breaks = seq(0, 1, by = 0.05),
+  include.lowest = TRUE
+)
+
+calibration <- test_eval %>%
+  group_by(predicted_label, prob_bin) %>%
+  summarise(
+    n = n(),
+    mean_pred_prob = mean(max_prob),
+    empirical_accuracy = mean(correct),
+    .groups = "drop"
+  )
+
+print(calibration)
+
+# =============================================================================
+# 5. FIND FATE-SPECIFIC PROBABILITY THRESHOLD WHERE ACCURACY >= 80%
+# =============================================================================
+
+thresholds <- calibration %>%
+  filter(empirical_accuracy >= 0.90) %>%
+  group_by(predicted_label) %>%
+  slice_min(
+    order_by = mean_pred_prob,
+    n = 1,
+    with_ties = FALSE
+  ) %>%
+  ungroup() %>%
+  dplyr::select(
+    fate = predicted_label,
+    threshold = mean_pred_prob,
+    accuracy = empirical_accuracy,
+    n
+  )
+
+print(thresholds)
+
+
+# =============================================================================
+# 6. PLOT CALIBRATION CURVES
+# =============================================================================
+
+ggplot(
+  calibration,
+  aes(
+    x = mean_pred_prob,
+    y = empirical_accuracy,
+    color = predicted_label
+  )
+) +
+  geom_line(linewidth = 1) +
+  geom_point(aes(size = n)) +
+  geom_hline(
+    yintercept = 0.90,
+    linetype = "dashed",
+    color = "red"
+  ) +
+  geom_abline(
+    slope = 1,
+    intercept = 0,
+    linetype = "dashed",
+    color = "gray50"
+  ) +
+  scale_x_continuous(
+    limits = c(0, 1),
+    breaks = seq(0, 1, 0.1)
+  ) +
+  scale_y_continuous(
+    limits = c(0, 1),
+    breaks = seq(0, 1, 0.1)
+  ) +
+  labs(
+    title = "Calibration by Predicted Fate",
+    x = "Mean predicted probability",
+    y = "Empirical accuracy",
+    color = "Predicted fate",
+    size = "Number of cells"
+  ) +
+  theme_classic()
+
+# =============================================================================
+# 7. APPLY FATE-SPECIFIC 80% ACCURACY THRESHOLDS TO RL_sub_atoh1
+# =============================================================================
+
+threshold_vec <- setNames(
+  thresholds$threshold,
+  thresholds$fate
+)
+
+RL_sub_atoh1$high_fate_label <- NA_character_
+
+for (ct in names(threshold_vec)) {
+  
+  th <- threshold_vec[[ct]]
+  
+  # Skip fates for which 80% accuracy was never reached
+  if (is.na(th)) next
+  
+  cells <- which(
+    RL_sub_atoh1$predicted_fate == ct &
+    RL_sub_atoh1$max_fate_prob >= th
+  )
+  
+  RL_sub_atoh1$high_fate_label[cells] <- ct
+}
+
+# Convert to factor
+RL_sub_atoh1$high_fate_label <- factor(
+  RL_sub_atoh1$high_fate_label,
+  levels = unique(RL_sub_atoh1$predicted_fate)
+)
+
+# =============================================================================
+# 8. CHECK HOW MANY CELLS WERE RETAINED
+# =============================================================================
+
+table(
+  RL_sub_atoh1$high_fate_label,
+  useNA = "ifany"
+)
+
+# =============================================================================
+# 9. PLOT
+# =============================================================================
+
+DimPlot(
+  RL_sub_atoh1,
+  group.by = "predicted_fate",
+  pt.size = 2
+)
+
+DimPlot(
+  RL_sub_atoh1,
+  group.by = "high_fate_label",
+  pt.size = 2,
+  na.value = "lightgrey"
+)
+
+
+```
+
+##########################################EARLY VS LATE PERMUTATION##################################################
+
+
+
+```{r}
+set.seed(2)
+
+library(Seurat)
+library(glmnet)
+library(dplyr)
+
+############################################
+## Shuffle options
+############################################
+shuffle_genes <- FALSE      # Shuffle train/test gene labels
+shuffle_labels <- TRUE     # Shuffle train/test cell type labels
+shuffle_rl_genes <- FALSE   # Independently shuffle RL_prog gene labels
+
+counts_mat <- URL_e13_lda_sub[["RNA"]]$counts
+meta <- URL_e13_lda_sub@meta.data
+URL_clean <- CreateSeuratObject(counts = counts_mat, meta.data = meta)
+
+print(URL_e13_lda)
+print(URL_clean)
+
+# =============================================================================
+# 1. SPLIT DATA (BEFORE FEATURE SELECTION)
+# =============================================================================
+cells <- colnames(URL_clean)
+train_cells <- sample(cells, 0.5 * length(cells))
+test_cells <- setdiff(cells, train_cells)
+
+train_obj <- subset(URL_clean, cells = train_cells)
+test_obj <- subset(URL_clean, cells = test_cells)
+
+# =============================================================================
+# 2. NORMALIZE + SCALE
+# =============================================================================
+train_obj <- NormalizeData(train_obj)
+train_obj <- ScaleData(train_obj, verbose = FALSE)
+
+test_obj <- NormalizeData(test_obj)
+test_obj <- ScaleData(test_obj, verbose = FALSE)
+
+############################################
+## Shuffle metadata labels
+############################################
+if (shuffle_labels) {
+
+  print(train_obj$branch)
+
+  train_obj$branch <- unname(sample(train_obj$branch))
+  test_obj$branch <- unname(sample(test_obj$branch))
+
+  print(train_obj$branch)
+  cat("Metadata labels shuffled\n")
+}
+
+############################################
+## Shuffle train/test gene labels
+############################################
+gene_name_map <- NULL
+
+if (shuffle_genes) {
+
+  original_genes <- rownames(train_obj[["RNA"]])
+
+  gene_name_map <- setNames(
+    sample(original_genes),
+    original_genes
+  )
+
+  train_genes <- rownames(train_obj[["RNA"]])
+  test_genes <- rownames(test_obj[["RNA"]])
+
+  stopifnot(all(test_genes %in% names(gene_name_map)))
+
+  rownames(train_obj[["RNA"]]) <- unname(gene_name_map[train_genes])
+  rownames(test_obj[["RNA"]]) <- unname(gene_name_map[test_genes])
+
+  cat("Train and test gene labels shuffled using the same mapping\n")
+}
+
+# =============================================================================
+# 3. FEATURE SELECTION (TRAIN ONLY)
+# =============================================================================
+Idents(train_obj) <- "branch"
+
+markers <- FindAllMarkers(
+  train_obj,
+  only.pos = TRUE
+  # min.pct = 0.6,
+  # logfc.threshold = 1
+)
+
+scale_genes <- rownames(
+  GetAssayData(train_obj, assay = "RNA", layer = "scale.data")
+)
+
+train_features <- intersect(scale_genes, markers$gene)
+
+cat("Training features:", length(train_features), "\n")
+
+# =============================================================================
+# 4. BUILD MATRICES
+# =============================================================================
+train_data <- GetAssayData(
+  train_obj,
+  assay = "RNA",
+  layer = "scale.data"
+)[train_features, , drop = FALSE]
+
+train_matrix <- t(as.matrix(train_data))
+train_labels <- as.factor(train_obj$branch)
+
+test_data <- GetAssayData(
+  test_obj,
+  assay = "RNA",
+  layer = "scale.data"
+)[train_features, , drop = FALSE]
+
+test_matrix <- t(as.matrix(test_data))
+test_labels <- as.factor(test_obj$branch)
+
+# =============================================================================
+# 5. TRAIN LOGISTIC REGRESSION
+# =============================================================================
+fit <- cv.glmnet(
+  x = train_matrix,
+  y = train_labels,
+  family = "multinomial",
+  alpha = 0,
+  standardize = TRUE
+)
+
+cat("Model trained!\n")
+
+# =============================================================================
+# 6. EVALUATION
+# =============================================================================
+pred <- predict(
+  fit,
+  newx = test_matrix,
+  s = "lambda.min",
+  type = "class"
+)
+
+acc <- mean(pred == test_labels)
+cat("Test accuracy:", acc, "\n")
+
+cat("\nConfusion matrix:\n")
+print(table(pred, test_labels))
+
+# =============================================================================
+# 7. PERMUTATION TEST (SIGNAL CHECK)
+# =============================================================================
+perm_labels <- sample(train_labels)
+
+fit_perm <- cv.glmnet(
+  x = train_matrix,
+  y = perm_labels,
+  family = "multinomial",
+  alpha = 0,
+  standardize = TRUE
+)
+
+pred_perm <- predict(
+  fit_perm,
+  newx = test_matrix,
+  s = "lambda.min",
+  type = "class"
+)
+
+acc_perm <- mean(pred_perm == test_labels)
+cat("Permutation accuracy:", acc_perm, "\n")
+
+cm <- table(pred, test_labels)
+cm_prop <- prop.table(cm, 2)
+#p <- heatmap(cm_prop)
+
+pred <- predict(
+  fit,
+  newx = test_matrix,
+  s = "lambda.min",
+  type = "response"
+)
+
+prob_mat <- pred[, , 1]
+pred_labels <- colnames(prob_mat)[max.col(prob_mat)]
+max_prob <- apply(prob_mat, 1, max)
+
+entropy <- -rowSums(prob_mat * log(prob_mat + 1e-10))
+
+test_obj$predicted_fate <- pred_labels
+test_obj$max_fate_prob <- max_prob
+test_obj$fate_entropy <- entropy
+
+correct <- pred_labels == as.character(test_labels)
+
+test_eval <- data.frame(
+  true_label = as.character(test_labels),
+  predicted_label = pred_labels,
+  max_prob = max_prob,
+  correct = correct
+)
+
+head(test_eval)
+
+test_eval$prob_bin <- cut(
+  test_eval$max_prob,
+  breaks = seq(0, 1, by = 0.1),
+  include.lowest = TRUE
+)
+
+calibration <- test_eval %>%
+  group_by(prob_bin) %>%
+  summarise(
+    n = n(),
+    mean_pred_prob = mean(max_prob),
+    empirical_accuracy = mean(correct),
+    .groups = "drop"
+  )
+
+print(calibration)
+
+# =============================================================================
+# 8. APPLY TO CYCLING PROGENITORS
+# =============================================================================
+RL_prog <- RL
+
+# Apply filters before shuffling gene labels
+RL_prog <- subset(
+  RL_prog,
+  subset = !(Lmx1a > 0 & TimePoint == "E9.5")
+)
+
+RL_prog <- FindClusters(RL_prog)
+
+RL_prog <- subset(
+  RL_prog,
+  subset = seurat_clusters != 10
+)
+
+rl_scale <- GetAssayData(
+  RL_prog,
+  assay = "RNA",
+  layer = "scale.data"
+)
+
+############################################
+## Optionally shuffle RL_prog gene labels
+############################################
+rl_gene_name_map <- NULL
+
+if (shuffle_rl_genes) {
+
+  original_rl_genes <- rownames(rl_scale)
+
+  # One gene-label permutation shared across all progenitor cells
+  rl_gene_name_map <- setNames(
+    sample(original_rl_genes),
+    original_rl_genes
+  )
+
+  rownames(rl_scale) <- unname(
+    rl_gene_name_map[original_rl_genes]
+  )
+
+  cat("RL_prog prediction-matrix gene labels shuffled\n")
+}
+
+# The shuffle affects rl_scale used for prediction.
+# Original assay gene names in RL_prog remain available for plotting.
+
+query_matrix <- matrix(
+  0,
+  nrow = ncol(rl_scale),
+  ncol = length(train_features),
+  dimnames = list(
+    colnames(rl_scale),
+    train_features
+  )
+)
+
+common_features <- intersect(
+  train_features,
+  rownames(rl_scale)
+)
+
+query_matrix[, common_features] <- t(
+  as.matrix(rl_scale[common_features, , drop = FALSE])
+)
+
+# =============================================================================
+# PREDICT
+# =============================================================================
+query_probs <- predict(
+  fit,
+  newx = query_matrix,
+  s = "lambda.min",
+  type = "response"
+)
+
+# =============================================================================
+# 9. FATE BIAS METRICS
+# =============================================================================
+prob_mat <- query_probs[, , 1]
+pred_labels <- colnames(prob_mat)[max.col(prob_mat)]
+max_prob <- apply(prob_mat, 1, max)
+
+entropy <- -rowSums(prob_mat * log(prob_mat + 1e-10))
+
+RL_prog$predicted_fate <- pred_labels
+RL_prog$max_fate_prob <- max_prob
+RL_prog$fate_entropy <- entropy
+
+cat("\nRL_prog predictions complete!\n")
+
+DimPlot(
+  RL_prog,
+  group.by = "predicted_fate",
+  pt.size = 2
+)
+```
+
+
+```{r}
 cell_types <- unique(RL_sub_atoh1$predicted_fate)
 
+# 20th percentile threshold for each fate
+threshold <- sapply(cell_types, function(ct) {
+  quantile(
+    RL_sub_atoh1$max_fate_prob[RL_sub_atoh1$predicted_fate == ct],
+    0.2,
+    na.rm = TRUE
+  )
+})
+
+names(threshold) <- cell_types
+
 #svg(
-#  filename = "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/RLbranch_PROG_fate_probability_histograms.svg",
+#  filename = "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/PERMUTElabels_earlyRL_TEST_fate_probability_histograms.svg",
 #  width = 10,
 #  height = 4
 #)
 
-par(mfrow = c(ceiling(length(cell_types)/4), 4))  # layout
+par(
+  mfrow = c(ceiling(length(cell_types)/4), 4),
+  mar = c(3, 3, 2, 1)  # smaller margins: bottom, left, top, right
+)
 
 for (ct in cell_types) {
-  vals <- RL_sub_atoh1$max_fate_prob[RL_sub_atoh1$predicted_fate == ct]
-  
+
+  vals <- test_obj$max_fate_prob[test_obj$predicted_fate == ct]
+
   hist(
     vals,
     main = ct,
@@ -683,8 +1240,6 @@ for (ct in cell_types) {
     col = "grey80",
     border = "white"
   )
-  # 20th percentile threshold
-  
 }
 
 #dev.off()
@@ -698,38 +1253,6 @@ for (ct in cell_types) {
 
 
 
-
-
-
-
-```{r}
-# Get unique cell types from test_obj (used for thresholds)
-cell_types <- unique(test_obj$predicted_fate)
-
-# Compute 90th percentile thresholds from test_obj
-thresholds <- sapply(cell_types, function(ct) {
-  quantile(test_obj$max_fate_prob[test_obj$predicted_fate == ct], 0.2, na.rm = TRUE)
-})
-
-# Initialize metadata for RL_sub
-RL_sub_atoh1$high_fate_label <- NA  # default is NA
-
-for (ct in names(thresholds)) {
-  ct_clean <- gsub("\\.20%", "", ct)  # remove ".percent" at the end
-  print(ct_clean)
-  cells <- which(RL_sub_atoh1$predicted_fate == ct_clean)
-  
-  RL_sub_atoh1$high_fate_label[cells] <- ifelse(
-    RL_sub_atoh1$max_fate_prob[cells] > thresholds[ct],
-    RL_sub_atoh1$predicted_fate[cells],
-    NA
-  )
-}
-
-# Optional: convert to factor (NA will stay as NA)
-RL_sub_atoh1$high_fate_label <- factor(RL_sub_atoh1$high_fate_label, levels = unique(RL_sub_atoh1$predicted_fate))
-DimPlot(RL_sub_atoh1, group.by = "high_fate_label", pt.size = 2)
-```
 
 
 ```{r}
@@ -960,13 +1483,6 @@ URL$med_2p_branch_full_ordered <- factor(
   levels = unique(URL$med_2p_branch_full[cell_order])
 )
 ```
-
-```{r}
-DimPlot(URL, group.by = "med_2p_branch_full")
-```
-
-
-
 
 ```{r}
 DimPlot(URL, group.by = "med_2p_branch_full")
@@ -1210,12 +1726,18 @@ test_obj$predicted_fate <- pred_labels
 test_obj$max_fate_prob <- max_prob
 test_obj$fate_entropy <- entropy
 
+install.packages("svglite")  # run once
 
-```
+library(pheatmap)
+library(svglite)
 
+svglite("C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/confusion_matrix_earlyCN.svg", width = 6, height = 5)
 
+pheatmap(
+  cm_prop,display_numbers = TRUE,number_format = "%.2f", color = colorRampPalette(c("white", "red"))(100),breaks = seq(0, 1, length.out = 101))
 
-```{r}
+dev.off()
+
 # =============================================================================
 # 8. APPLY TO RL_sub (FIXED)
 # =============================================================================
@@ -1304,15 +1826,633 @@ FeaturePlot(RL_sub_early, feature = "fate_entropy", pt.size = 2)
 DimPlot(RL_sub_early, group.by = "TimePoint", shuffle = TRUE, pt.size = 1)
 ```
 
+
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# =============================================================================
+# 1. PREDICTION
+# =============================================================================
+
+pred <- predict(
+  fit,
+  newx = test_matrix,
+  s = "lambda.min",
+  type = "response"
+)
+
+prob_mat <- pred[, , 1]
+
+pred_labels <- colnames(prob_mat)[max.col(prob_mat)]
+max_prob <- apply(prob_mat, 1, max)
+
+# Entropy
+entropy <- -rowSums(
+  prob_mat * log(prob_mat + 1e-10)
+)
+
+# =============================================================================
+# 2. STORE PREDICTIONS IN SEURAT OBJECT
+# =============================================================================
+
+test_obj$predicted_fate <- pred_labels
+test_obj$max_fate_prob <- max_prob
+test_obj$fate_entropy <- entropy
+
+# =============================================================================
+# 3. EVALUATION TABLE
+# =============================================================================
+
+correct <- pred_labels == as.character(test_labels)
+
+test_eval <- data.frame(
+  true_label = as.character(test_labels),
+  predicted_label = pred_labels,
+  max_prob = max_prob,
+  correct = correct
+)
+
+head(test_eval)
+
+# =============================================================================
+# 4. CALIBRATION BY PREDICTED FATE
+# =============================================================================
+
+# Use smaller bins so threshold is more precise
+test_eval$prob_bin <- cut(
+  test_eval$max_prob,
+  breaks = seq(0, 1, by = 0.05),
+  include.lowest = TRUE
+)
+
+calibration <- test_eval %>%
+  group_by(predicted_label, prob_bin) %>%
+  summarise(
+    n = n(),
+    mean_pred_prob = mean(max_prob),
+    empirical_accuracy = mean(correct),
+    .groups = "drop"
+  )
+
+print(calibration)
+
+# =============================================================================
+# 5. FIND FATE-SPECIFIC PROBABILITY THRESHOLD WHERE ACCURACY >= 80%
+# =============================================================================
+
+thresholds <- calibration %>%
+  filter(empirical_accuracy >= 0.9) %>%
+  group_by(predicted_label) %>%
+  slice_min(
+    order_by = mean_pred_prob,
+    n = 1,
+    with_ties = FALSE
+  ) %>%
+  ungroup() %>%
+  dplyr::select(
+    fate = predicted_label,
+    threshold = mean_pred_prob,
+    accuracy = empirical_accuracy,
+    n
+  )
+
+print(thresholds)
+
+
+# =============================================================================
+# 6. PLOT CALIBRATION CURVES
+# =============================================================================
+
+ggplot(
+  calibration,
+  aes(
+    x = mean_pred_prob,
+    y = empirical_accuracy,
+    color = predicted_label
+  )
+) +
+  geom_line(linewidth = 1) +
+  geom_point(aes(size = n)) +
+  geom_hline(
+    yintercept = 0.9,
+    linetype = "dashed",
+    color = "red"
+  ) +
+  geom_abline(
+    slope = 1,
+    intercept = 0,
+    linetype = "dashed",
+    color = "gray50"
+  ) +
+  scale_x_continuous(
+    limits = c(0, 1),
+    breaks = seq(0, 1, 0.1)
+  ) +
+  scale_y_continuous(
+    limits = c(0, 1),
+    breaks = seq(0, 1, 0.1)
+  ) +
+  labs(
+    title = "Calibration by Predicted Fate",
+    x = "Mean predicted probability",
+    y = "Empirical accuracy",
+    color = "Predicted fate",
+    size = "Number of cells"
+  ) +
+  theme_classic()
+
+# =============================================================================
+# 7. APPLY FATE-SPECIFIC 80% ACCURACY THRESHOLDS TO RL_sub_atoh1
+# =============================================================================
+
+threshold_vec <- setNames(
+  thresholds$threshold,
+  thresholds$fate
+)
+
+RL_sub_early$high_fate_label <- NA_character_
+
+for (ct in names(threshold_vec)) {
+  
+  th <- threshold_vec[[ct]]
+  
+  # Skip fates for which 80% accuracy was never reached
+  if (is.na(th)) next
+  
+  cells <- which(
+    RL_sub_early$predicted_fate == ct &
+    RL_sub_early$max_fate_prob >= th
+  )
+  
+  RL_sub_early$high_fate_label[cells] <- ct
+}
+
+# Convert to factor
+RL_sub_early$high_fate_label <- factor(
+  RL_sub_early$high_fate_label,
+  levels = unique(RL_sub_early$predicted_fate)
+)
+
+# =============================================================================
+# 8. CHECK HOW MANY CELLS WERE RETAINED
+# =============================================================================
+
+table(
+  RL_sub_early$high_fate_label,
+  useNA = "ifany"
+)
+
+# =============================================================================
+# 9. PLOT
+# =============================================================================
+
+DimPlot(
+  RL_sub_early,
+  group.by = "predicted_fate",
+  pt.size = 2
+)
+```
+
+
+```{r}
+library(Seurat)
+library(glmnet)
+library(dplyr)
+
+############################################
+## Shuffle options
+############################################
+shuffle_genes <- FALSE      # Shuffle train/test gene labels
+shuffle_labels <- TRUE    # Shuffle train/test cell type labels
+shuffle_rl_genes <- FALSE   # Shuffle progenitor gene labels for prediction
+
+# =============================================================================
+# PREPARE TRAINING DATA
+# =============================================================================
+URL_e13_lda <- subset(
+  URL,
+  subset = TimePoint %in% c("E13.5", "E14.5")
+)
+
+URL_e13_lda <- subset(
+  URL_e13_lda,
+  subset = !(med_2p_branch_full %in% c(
+    "Int/Lat Prog", "IntA", "Lat", "Med", "RL",
+    "RL_early", "RL_late", "Late Medial", "Granule Cells+UBCs"
+  ))
+)
+
+FeaturePlot(URL_e13_lda, features = c("Nr2f1", "Nfib"))
+
+# Sample equal numbers of cells from each observed category
+min_cells <- min(table(droplevels(
+  as.factor(URL_e13_lda$med_2p_branch_full)
+)))
+
+keep_cells <- c()
+
+for (celltype in unique(URL_e13_lda$med_2p_branch_full)) {
+
+  type_cells <- colnames(URL_e13_lda)[
+    URL_e13_lda$med_2p_branch_full == celltype
+  ]
+
+  sampled_cells <- sample(type_cells, min_cells)
+  keep_cells <- c(keep_cells, sampled_cells)
+}
+
+URL_e13_lda <- subset(URL_e13_lda, cells = keep_cells)
+
+print(paste("Balanced to", min_cells, "cells per category"))
+print("After balancing:")
+print(table(URL_e13_lda$med_2p_branch_full))
+
+tf_list <- read.table(
+  "C:/Users/kebsc/Downloads/Mus_musculus_TF.txt",
+  header = TRUE,
+  fill = TRUE,
+  sep = "\t"
+)
+
+tf_list1 <- unique(na.omit(tf_list$Symbol))
+tf_list1 <- intersect(tf_list1, rownames(URL_e13_lda))
+
+print(paste("Found", length(tf_list1), "TFs in your data"))
+
+tf_features <- intersect(tf_list1, rownames(URL_e13_lda))
+URL_e13_lda_sub <- URL_e13_lda[tf_features, ]
+
+counts_mat <- URL_e13_lda_sub[["RNA"]]$counts
+meta <- URL_e13_lda_sub@meta.data
+
+URL_clean <- CreateSeuratObject(
+  counts = counts_mat,
+  meta.data = meta
+)
+
+print(URL_e13_lda)
+print(URL_clean)
+
+set.seed(1)
+
+# =============================================================================
+# 1. SPLIT DATA (BEFORE FEATURE SELECTION)
+# =============================================================================
+cells <- colnames(URL_clean)
+train_cells <- sample(cells, 0.5 * length(cells))
+test_cells <- setdiff(cells, train_cells)
+
+train_obj <- subset(URL_clean, cells = train_cells)
+test_obj <- subset(URL_clean, cells = test_cells)
+
+# =============================================================================
+# 2. NORMALIZE + SCALE
+# =============================================================================
+train_obj <- NormalizeData(train_obj)
+train_obj <- ScaleData(train_obj, verbose = FALSE)
+
+test_obj <- NormalizeData(test_obj)
+test_obj <- ScaleData(test_obj, verbose = FALSE)
+
+############################################
+## Shuffle metadata labels
+############################################
+if (shuffle_labels) {
+
+  train_obj$med_2p_branch_full <- unname(
+    sample(train_obj$med_2p_branch_full)
+  )
+
+  test_obj$med_2p_branch_full <- unname(
+    sample(test_obj$med_2p_branch_full)
+  )
+
+  cat("Metadata labels shuffled\n")
+}
+
+############################################
+## Shuffle train/test gene labels
+############################################
+if (shuffle_genes) {
+
+  original_genes <- rownames(train_obj[["RNA"]])
+
+  gene_name_map <- setNames(
+    sample(original_genes),
+    original_genes
+  )
+
+  test_genes <- rownames(test_obj[["RNA"]])
+  stopifnot(all(test_genes %in% names(gene_name_map)))
+
+  rownames(train_obj[["RNA"]]) <- unname(
+    gene_name_map[original_genes]
+  )
+
+  rownames(test_obj[["RNA"]]) <- unname(
+    gene_name_map[test_genes]
+  )
+
+  cat("Train/test gene names shuffled\n")
+}
+
+# =============================================================================
+# 3. FEATURE SELECTION
+# =============================================================================
+Idents(train_obj) <- "med_2p_branch_full"
+
+markers <- FindAllMarkers(
+  train_obj,
+  only.pos = TRUE,
+  #min.pct = 0.5,
+  #logfc.threshold = 0.5
+)
+
+train_features <- markers %>%
+  group_by(cluster) %>%
+  slice_max(avg_log2FC, n = 100) %>%
+  pull(gene) %>%
+  unique()
+
+RL_sub_early <- RL_sub
+
+# Remove Lmx1a+ cells at E9.5
+RL_sub_early <- subset(
+  RL_sub_early,
+  subset = !(TimePoint == "E9.5" & Lmx1a > 0)
+)
+
+RL_sub_early <- NormalizeData(RL_sub_early)
+RL_sub_early <- ScaleData(RL_sub_early)
+
+RL_sub_early <- FindVariableFeatures(
+  RL_sub_early,
+  nfeatures = 1000
+)
+
+# Keep your original variable-feature source
+rl_var_genes <- VariableFeatures(RL_sub)
+
+scale_genes <- rownames(
+  GetAssayData(RL_sub_early, layer = "scale.data")
+)
+
+train_features <- intersect(train_features, scale_genes)
+train_features <- intersect(train_features, rl_var_genes)
+
+cat("Training features:", length(train_features), "\n")
+
+# =============================================================================
+# 4. BUILD MATRICES
+# =============================================================================
+# TRAIN
+train_data <- GetAssayData(
+  train_obj,
+  layer = "scale.data"
+)[train_features, , drop = FALSE]
+
+train_matrix <- t(as.matrix(train_data))
+train_labels <- as.factor(train_obj$med_2p_branch_full)
+
+# TEST
+test_data <- GetAssayData(
+  test_obj,
+  layer = "scale.data"
+)[train_features, , drop = FALSE]
+
+test_matrix <- t(as.matrix(test_data))
+test_labels <- as.factor(test_obj$med_2p_branch_full)
+
+# =============================================================================
+# 5. TRAIN LOGISTIC REGRESSION
+# =============================================================================
+fit <- cv.glmnet(
+  x = train_matrix,
+  y = train_labels,
+  family = "multinomial",
+  alpha = 1   # Lasso
+)
+
+cat("Model trained!\n")
+
+# =============================================================================
+# 6. EVALUATION
+# =============================================================================
+pred <- predict(
+  fit,
+  newx = test_matrix,
+  s = "lambda.min",
+  type = "class"
+)
+
+acc <- mean(pred == test_labels)
+cat("Test accuracy:", acc, "\n")
+
+cat("\nConfusion matrix:\n")
+print(table(pred, test_labels))
+
+# =============================================================================
+# 7. PERMUTATION TEST (DISABLED AS IN ORIGINAL)
+# =============================================================================
+perm_labels <- sample(train_labels)
+
+# fit_perm <- cv.glmnet(
+#   x = train_matrix,
+#   y = perm_labels,
+#   family = "multinomial",
+#   alpha = 0
+# )
+
+cm <- table(pred, test_labels)
+cm_prop <- prop.table(cm, 2)
+heatmap(cm_prop)
+
+pred <- predict(
+  fit,
+  newx = test_matrix,
+  s = "lambda.min",
+  type = "response"
+)
+
+prob_mat <- pred[, , 1]
+pred_labels <- colnames(prob_mat)[max.col(prob_mat)]
+max_prob <- apply(prob_mat, 1, max)
+
+entropy <- -rowSums(prob_mat * log(prob_mat + 1e-10))
+
+test_obj$predicted_fate <- pred_labels
+test_obj$max_fate_prob <- max_prob
+test_obj$fate_entropy <- entropy
+
+# Run once if needed:
+# install.packages(c("pheatmap", "svglite"))
+
+library(pheatmap)
+library(svglite)
+
+svglite(
+  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/confusion_matrix_earlyCN.svg",
+  width = 6,
+  height = 5
+)
+
+pheatmap(
+  cm_prop,
+  display_numbers = TRUE,
+  number_format = "%.2f",
+  color = colorRampPalette(c("white", "red"))(100),
+  breaks = seq(0, 1, length.out = 101)
+)
+
+dev.off()
+
+# =============================================================================
+# 8. APPLY TO RL PROGENITORS
+# =============================================================================
+# Subset early cells using existing predictions
+RL_sub_early <- subset(
+  RL_sub_atoh1,
+  subset = predicted_fate == "early"
+)
+
+RL_sub_early <- subset(
+  RL_sub_early,
+  subset = max_fate_prob > 0.7
+)
+
+RL_sub_early <- subset(
+  RL_sub_early,
+  subset = TimePoint != "E13.5"
+)
+
+RL_sub_early <- NormalizeData(RL_sub_early)
+
+RL_sub_early <- ScaleData(
+  RL_sub_early,
+  verbose = FALSE
+)
+
+# Compute PCA and UMAP using original gene labels
+RL_sub_early <- RunPCA(
+  RL_sub_early,
+  #features = train_features,
+  verbose = FALSE
+)
+
+RL_sub_early <- RunUMAP(
+  RL_sub_early,
+  dims = 1:5,
+  verbose = FALSE
+)
+
+############################################
+## Optionally shuffle progenitor gene labels
+############################################
+rl_scale <- GetAssayData(
+  RL_sub_early,
+  layer = "scale.data"
+)
+
+rl_gene_name_map <- NULL
+
+if (shuffle_rl_genes) {
+
+  original_rl_genes <- rownames(rl_scale)
+
+  # Shuffle labels across all scaled progenitor genes.
+  # Apply one shared permutation across every progenitor cell.
+  rl_gene_name_map <- setNames(
+    sample(original_rl_genes),
+    original_rl_genes
+  )
+
+  rownames(rl_scale) <- unname(
+    rl_gene_name_map[original_rl_genes]
+  )
+
+  cat("RL progenitor gene labels shuffled for prediction\n")
+}
+
+# Select training features AFTER shuffling.
+# The Seurat object's gene names and UMAP remain unchanged.
+query_matrix <- t(
+  as.matrix(
+    rl_scale[train_features, , drop = FALSE]
+  )
+)
+
+# =============================================================================
+# PREDICT
+# =============================================================================
+query_probs <- predict(
+  fit,
+  newx = query_matrix,
+  s = "lambda.min",
+  type = "response"
+)
+
+# =============================================================================
+# 9. FATE BIAS METRICS
+# =============================================================================
+prob_mat <- query_probs[, , 1]
+pred_labels <- colnames(prob_mat)[max.col(prob_mat)]
+max_prob <- apply(prob_mat, 1, max)
+
+entropy <- -rowSums(prob_mat * log(prob_mat + 1e-10))
+
+RL_sub_early$predicted_fate <- pred_labels
+RL_sub_early$max_fate_prob <- max_prob
+RL_sub_early$fate_entropy <- entropy
+
+cat("\nRL_sub predictions complete!\n")
+
+DimPlot(
+  RL_sub_early,
+  group.by = "predicted_fate",
+  shuffle = TRUE,
+  pt.size = 2
+)
+
+FeaturePlot(
+  RL_sub_early,
+  features = "fate_entropy",
+  pt.size = 2
+)
+
+DimPlot(
+  RL_sub_early,
+  group.by = "TimePoint",
+  shuffle = TRUE,
+  pt.size = 1
+)
+```
+
+```{r}
+RL_sub_early$predicted_fate_high <- ifelse(
+  RL_sub_early$max_fate_prob > 0.8,
+  RL_sub_early$predicted_fate,
+  NA
+)
+
+DimPlot(
+  RL_sub_early,
+  group.by = "predicted_fate_high",
+  pt.size = 2
+)
+
+```
+
+
 ```{r}
 id="h2y8qf"
 cell_types <- unique(RL_sub_early$predicted_fate)
 
-#svg(
-#  filename = "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRL_PROG_fate_probability_histograms.svg",
-#  width = 10,
-#  height = 4
-#)
+svg(
+    filename = "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/PERMUTElabels_earlyRL_PROG_fate_probability_histograms.svg",
+  width = 10,
+  height = 4
+)
 
 par(mfrow = c(ceiling(length(cell_types)/4), 4))  # layout
 
@@ -1574,7 +2714,10 @@ p <- DimPlot(
   pt.size = 2,
   na.value = "lightgrey")
 p
+```
 
+
+```{r}
 ggsave(
   "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/earlyRLProg_CNlabel.svg",
   plot = p,

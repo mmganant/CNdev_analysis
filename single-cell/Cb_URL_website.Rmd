@@ -57,6 +57,7 @@ VlnPlot(
 )
 ```
 ```{r}
+#clusters enriched for En1/2
 URL <- subset(
   all_data,
   subset = seurat_clusters %in% c(
@@ -160,6 +161,49 @@ FeaturePlot(URL, features = "Nfia", max.cutoff = 2)
 
 ```
 
+```{r}
+# Average expression per cluster
+avg_expr <- AverageExpression(
+  URL,
+  assays = "RNA",
+  slot = "data",
+  group.by = "seurat_clusters"
+)$RNA
+
+# Pearson correlation between clusters
+cor_mat <- cor(
+  avg_expr,
+  method = "pearson"
+)
+
+# Extract cluster pairs and remove self-correlations
+cor_pairs <- as.data.frame(as.table(cor_mat))
+colnames(cor_pairs) <- c("Cluster1", "Cluster2", "Pearson_r")
+
+cor_pairs <- cor_pairs[
+  cor_pairs$Cluster1 != cor_pairs$Cluster2 &
+    cor_pairs$Pearson_r > 0.8,
+]
+
+# Remove duplicate pairs
+cor_pairs <- cor_pairs[
+  as.numeric(as.character(cor_pairs$Cluster1)) <
+    as.numeric(as.character(cor_pairs$Cluster2)),
+]
+
+# Sort by correlation
+cor_pairs <- cor_pairs[
+  order(-cor_pairs$Pearson_r),
+]
+
+cor_pairs
+```
+
+
+```{r}
+URL <- readRDS("URL_082026.rds")
+```
+
 
 ```{r}
 URL$cell_type_coarse <- recode(URL$RNA_snn_res.1.5,
@@ -198,7 +242,23 @@ URL$cell_type_coarse <- recode(URL$RNA_snn_res.1.5,
 
 ```{r}
 DimPlot(URL, group.by = "cell_type_coarse") + NoAxes()
+DimPlot(URL, group.by = "Sample") + NoAxes()
+
+DimPlot(URL, group.by = "TimePoint") + NoAxes()
+DimPlot(URL, group.by = "branch") + NoAxes()
+
 ```
+```{r}
+URL@meta.data <- URL@meta.data[, c(
+  "cell_type_coarse",
+  "Sample",
+  "TimePoint",
+  "branch"
+)]
+saveRDS(URL, "URL_082026_website.rds")
+```
+
+
 ```{r}
 colors = c("Medial DCN"="blue", "Granule Cells+UBCs"="purple", "Interposed/LateralDCN"="orange", "Extracerebellar-fated"="black", "RL" = "lightblue")
 
@@ -814,146 +874,4 @@ ggsave("C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mous
   height = 5)
 
 ```
-
-```{r}
-
-```{r}
-combined_alltp$med_2p_branch_coarse <- recode(
-  combined_alltp$SCT_snn_res.2,
-  
-  "0"  = "Int/Lat Prog", 
-  "1"  = "Med",
-  "2"  = "Med", 
-  "3"  = "IntA",
-  "4"  = "RL", 
-  "5"  = "IntA/Lat",
-  "6"  = "Med", 
-  "7"  = "IntA/Lat",
-  "8"  = "RL", 
-  "9"  = "Int/Lat Prog",
-  "10" = "IntP", 
-  "11" = "IntA",
-  "12" = "Lat",
-  "13" = "IntP", 
-  "14" = "Med",
-  "15" = "Med",
-  "16" = "IntP", 
-  "17" = "Med",
-  "18" = "IntP",
-  "19"  = "Med",
-  "20" = "IntA/Lat", 
-  "21" = "Med",
-  "22" = "Lat",
-  "23" = "IntP", 
-  "24" = "IntP",
-  "25" = "IntP",
-  "26" = "Med"
-)
-
-branch_pal <- c(
-  "Int/Lat Prog" = "yellow",
-  "Med"          = "#08519c",
-  "IntA/Lat"     = "#fca800",
-  "IntA"     = "#f7a2f9",
-  "Lat"     = "#cf3731",
-  "RL"           = "lightblue",
-  #"IntP/IntA"  
-  "IntP"         = "#78b958",
-  #"Med_gly"      = "#17becf",
-  "Early Medial"        = "#824819",
-  "Late Medial"         = "blue",
-  "Midbrain-fated Cells"  = "black",
-  "Granule Cells+UBCs" = "purple"
-)
-
-# Start with existing annotation
-combined_alltp$med_2p_branch <- combined_alltp$med_2p_branch
-
-# Replace with subareas where available
-combined_alltp$med_2p_branch[!is.na(combined_alltp$subareas)] <-
-  combined_alltp$subareas[!is.na(combined_alltp$subareas)]
-
-# Collapse medial subtypes
-combined_alltp$med_2p_branch[combined_alltp$subareas == "MedL"] <-
-  "Early Medial"
-
-combined_alltp$med_2p_branch[combined_alltp$subareas == "Med"] <-
-  "Late Medial"
-
-# Override MedDL cells
-combined_alltp$med_2p_branch[combined_alltp$final.clusters2 == "MedDL"] <-
-  "Late Medial"
-
-# Start with the coarse annotation
-combined_alltp$med_2p_branch_new <- as.character(combined_alltp$med_2p_branch_coarse)
-
-# Rename Med -> Late Medial
-combined_alltp$med_2p_branch_new[
-  combined_alltp$med_2p_branch_coarse == "Med"
-] <- "Late Medial"
-
-# Replace with Early Medial where appropriate
-combined_alltp$med_2p_branch_new[
-  combined_alltp$med_2p_branch == "Early Medial"
-] <- "Early Medial"
-
-combined_alltp$med_2p_branch_new[combined_alltp$subareas == "MedL"] <-
-  "Early Medial"
-
-
-# Check the result
-#table(combined_alltp$med_2p_branch_new)
-#table(combined_alltp$med_2p_branch, combined_alltp$med_2p_branch_new)
-
-p <- DimPlot(
-  combined_alltp,
-  group.by = "med_2p_branch_coarse",
-  cols = branch_pal,
-  label = FALSE,
-  repel = TRUE
-)
-
-p
-
-
-
-
-ggsave(
-  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/CNcell_type_nomed_split.png",
-  plot = p,
-  width = 7,
-  height = 5,
-)
-p
-
-p <- DimPlot(
-  combined_alltp,
-  group.by = "TimePoint",
-  #cols = branch_pal,
-  label = FALSE,
-  repel = TRUE
-)
-
-
-
-ggsave(
-  "C:/Users/kebsc/OneDrive - Johns Hopkins/Manuscripts/figs/excitatory_mouse_umaps/CNtimepoint.svg",
-  plot = p,
-  width = 7,
-  height = 5,
-)
-p
-```
-```{r}
-DimPlot(
-  combined_alltp,
-  group.by = "med_2p_branch_new",
-  cols = branch_pal,
-  label = FALSE,
-  repel = TRUE
-)
-```
-
-```
-
 
