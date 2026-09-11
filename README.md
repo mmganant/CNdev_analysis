@@ -29,10 +29,5 @@ CNdev_analysis/
     ├── excCN_barseq3corr_M-Lquant.ipynb
     ├── inhibitory_integration.ipynb
     ├── integrated_all_slices_all_tps.ipynb
-    ├── scrnaseq_spatial_correlations.ipynb
-    │
-    ├── Zsgreen1_analysis/
-    │   ├── Raw_data_analysis_pipeline/
-    │   └── Cell_type_analysis/
-    │
-    └── Adult_CN_cell_type_analysis/
+    └── scrnaseq_spatial_correlations.ipynb
+    
