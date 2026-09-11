@@ -1,5 +1,6 @@
-## Excitatory progenitors drive cerebellar nucleus development and evolution 
+## Analysis Code for "Evolution of new cerebellar nuclei by excitatory progenitor diversification in the early rhombic lip"
 Manjari M-G Anant, Eli Zuercher, Maggie Lowman, Caleb Shi, Dylan Z. Faltine-Gonzalez, Michael L. Piacentino, Jean Fan, Justus M. Kebschull
+### bioRxiv preprint: 
 ### Data Explorer Website: https://mmganant.github.io/CNdev_website/ 
 ### Data Repository: https://zenodo.org/records/21796565
 ### Figures and Analysis Code 
